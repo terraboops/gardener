@@ -1,0 +1,22 @@
+[project]
+name = "gardener"
+version = "0.0.0"
+requires-python = ">=3.13"
+dependencies = [
+    "mlx",
+    "mlx-lm",
+    "numpy",
+    "pyyaml",
+    "lark",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+markers = ["model: loads a real MLX model (slow, downloads once)"]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
