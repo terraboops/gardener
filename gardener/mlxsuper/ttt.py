@@ -43,13 +43,15 @@ class TTTEngine:
     def __init__(self, model: nn.Module, tokenizer: Any, *, rank: int = 8,
                  lr: float = 1e-4, num_lora_layers: int = 4,
                  lora_scale: float = 20.0):
-        from mlx_lm.tuner.utils import linear_to_lora_layers
+        from mlx_lm.tuner.utils import linear_to_lora_layers, remove_lora_layers
 
         self.model = model
         self.tokenizer = tokenizer
         self.lr = lr
         self.candidates: dict[str, Candidate] = {}
         self.history: list[TrainStats] = []
+        # Strip any pre-existing LoRA adapters before re-applying (idempotent).
+        remove_lora_layers(model)
         model.freeze()
         linear_to_lora_layers(
             model, num_lora_layers,
@@ -145,11 +147,21 @@ class TTTEngine:
 
     def _project_grads(self, grads):
         """OPLoRA-project lora_a/lora_b grads per adapted LoRALinear."""
+        import mlx.nn as nn
         from mlx_lm.tuner.lora import LoRALinear
+
+        def _get_float_weight(lin) -> mx.array:
+            """Return (out, in) float32 weight, dequantizing if needed."""
+            if isinstance(lin, nn.QuantizedLinear):
+                W = mx.dequantize(
+                    lin.weight, lin.scales, lin.biases,
+                    lin.group_size, lin.bits)
+                return W.astype(mx.float32)
+            return lin.weight.astype(mx.float32)
 
         def walk(prefix, gnode, mnode):
             if isinstance(mnode, LoRALinear):
-                W = mnode.linear.weight  # (out, in)
+                W = _get_float_weight(mnode.linear)  # (out, in) float32
                 key = prefix
                 if key not in self._svd_cache:
                     self._svd_cache.update(
