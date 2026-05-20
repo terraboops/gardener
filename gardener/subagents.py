@@ -7,9 +7,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
-from mlx_lm import generate
+from mlx_lm import generate, stream_generate
 from mlx_lm.models.cache import load_prompt_cache, make_prompt_cache, save_prompt_cache
 from mlx_lm.sample_utils import make_sampler
 
@@ -23,6 +23,8 @@ class AgentProfile:
     system_prompt: str
     warmup_text: str               # text prefilled into the cache
     params: dict = field(default_factory=dict)   # max_tokens, temperature, …
+    draft_model: Optional[str] = None  # HF id of a smaller drafter (HX9)
+    num_draft_tokens: int = 8          # speculative decoding lookahead (HX9)
 
 
 class SubagentRegistry:
@@ -34,6 +36,9 @@ class SubagentRegistry:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self._profiles: dict[str, AgentProfile] = {}
+        # Lazy cache: HF id -> (draft_model, draft_tokenizer).  Loaded once
+        # on first runner() call that needs that drafter (HX9).
+        self._drafters: dict[str, tuple[Any, Any]] = {}
 
     def _cache_path(self, name: str) -> Path:
         return self.root / f"{name}.safetensors"
@@ -95,6 +100,25 @@ class SubagentRegistry:
             return (f"<|system|>\n{profile.system_prompt}\n<|user|>\n{body}"
                     f"\n<|assistant|>\n" if profile.system_prompt else body)
 
+        # Lazily load drafter once for this profile (HX9).
+        draft_model_obj: Any = None
+        if profile.draft_model is not None:
+            if profile.draft_model not in self._drafters:
+                from mlx_lm import load as _mlx_load
+                dm, dt = _mlx_load(profile.draft_model)
+                # Vocab check — mismatch raises immediately so misconfig
+                # surfaces at runner() time, not silently mid-request.
+                main_vocab = len(self.tokenizer)
+                draft_vocab = len(dt)
+                if main_vocab != draft_vocab:
+                    raise ValueError(
+                        f"vocab size mismatch for drafter {profile.draft_model!r}: "
+                        f"main={main_vocab}, draft={draft_vocab}. "
+                        "Drafter must share the same tokenizer as the main model."
+                    )
+                self._drafters[profile.draft_model] = (dm, dt)
+            draft_model_obj, _ = self._drafters[profile.draft_model]
+
         def runner(node: Node, inputs: dict) -> str:
             # Load warm cache + fork in a SessionPool.
             pool = SessionPool(cache_factory=lambda: load_prompt_cache(str(cache_path)))
@@ -107,9 +131,26 @@ class SubagentRegistry:
                                                      node.params.get("temperature", 0.0)))
             sampler = make_sampler(temp=temperature)
             prompt = _format_user(inputs)
-            text = generate(self.model, self.tokenizer, prompt=prompt,
-                             max_tokens=max_tokens, sampler=sampler,
-                             prompt_cache=fork_cache, verbose=False)
-            return text.strip()
+
+            if draft_model_obj is not None:
+                # Speculative decoding path (HX9).
+                text_parts: list[str] = []
+                for response in stream_generate(
+                    self.model,
+                    self.tokenizer,
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    draft_model=draft_model_obj,
+                    num_draft_tokens=profile.num_draft_tokens,
+                    sampler=sampler,
+                    prompt_cache=fork_cache,
+                ):
+                    text_parts.append(response.text)
+                return "".join(text_parts).strip()
+            else:
+                text = generate(self.model, self.tokenizer, prompt=prompt,
+                                 max_tokens=max_tokens, sampler=sampler,
+                                 prompt_cache=fork_cache, verbose=False)
+                return text.strip()
 
         return runner
