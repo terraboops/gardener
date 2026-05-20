@@ -204,6 +204,10 @@ class BenchConfig:
     mmlu_pro_n_questions: int = 25            # quick default; bump to 100 for full gate
     mmlu_pro_categories: list[str] | None = None  # None = all 14 categories
     gate_mmlu_pro_min_accuracy: float = 0.35
+    # RULER (HX12.3) — opt-in via phases list
+    ruler_suite: str = "quick"               # "quick" (6 tasks) or "full" (15 tasks)
+    gate_ruler_mk_min: float = 0.80          # multi_key_niah@16K >= 80%
+    gate_ruler_vt_min: float = 0.70          # variable_tracking@4K >= 70%
 
 
 # ---------------------------------------------------------------------------
@@ -739,6 +743,78 @@ def _phase_mmlu_pro(model, tokenizer, cfg: BenchConfig) -> PhaseResult:
 
 
 # ---------------------------------------------------------------------------
+# Phase: ruler (HX12.3)
+# ---------------------------------------------------------------------------
+
+def _phase_ruler(model, tokenizer, cfg: BenchConfig) -> PhaseResult:
+    """Run the RULER synthetic long-context quality gate.
+
+    Three subtask families at 4K/16K (quick) or 4K/16K/64K (full):
+      - multi_key_niah: retrieve N hidden key-value pairs (AND scoring)
+      - variable_tracking: trace a chain of variable assignments (OR scoring)
+      - frequent_word: identify the most-frequent marker word (OR scoring)
+
+    Two gates:
+      1. multi_key_niah@16K accuracy >= gate_ruler_mk_min (default 0.80)
+      2. variable_tracking@4K accuracy >= gate_ruler_vt_min (default 0.70)
+
+    Opt-in only — not in default phases. Enable via
+    phases=['ruler'] or --phases smoke,coherence,ruler on the CLI.
+    """
+    t0 = time.perf_counter()
+    try:
+        from gardener.bench.quality import (
+            RULER_QUICK_SUITE, RULER_FULL_SUITE, run_ruler_suite,
+        )
+
+        suite = RULER_FULL_SUITE if cfg.ruler_suite == "full" else RULER_QUICK_SUITE
+        result = run_ruler_suite(
+            model, tokenizer,
+            suite=suite,
+            gate_mk_min=cfg.gate_ruler_mk_min,
+            gate_vt_min=cfg.gate_ruler_vt_min,
+            verbose=logger.isEnabledFor(logging.DEBUG),
+        )
+
+        status = "passed" if result.passed_gate else "failed"
+        err: str | None = None
+        if not result.passed_gate:
+            parts = []
+            if result.mk_16k_accuracy is not None and result.mk_16k_accuracy < cfg.gate_ruler_mk_min:
+                parts.append(
+                    f"mk@16K {result.mk_16k_accuracy:.0%} < {cfg.gate_ruler_mk_min:.0%}"
+                )
+            if result.vt_4k_accuracy is not None and result.vt_4k_accuracy < cfg.gate_ruler_vt_min:
+                parts.append(
+                    f"vt@4K {result.vt_4k_accuracy:.0%} < {cfg.gate_ruler_vt_min:.0%}"
+                )
+            err = "; ".join(parts) if parts else "gate failed"
+
+        metrics: dict = {
+            "suite": cfg.ruler_suite,
+            "n_tasks": len(result.tasks),
+            "gate_mk_min": cfg.gate_ruler_mk_min,
+            "gate_vt_min": cfg.gate_ruler_vt_min,
+        }
+        if result.mk_16k_accuracy is not None:
+            metrics["mk_16k_accuracy"] = round(result.mk_16k_accuracy, 4)
+        if result.vt_4k_accuracy is not None:
+            metrics["vt_4k_accuracy"] = round(result.vt_4k_accuracy, 4)
+
+        return PhaseResult(
+            name="ruler", status=status,
+            elapsed_s=time.perf_counter() - t0,
+            metrics=metrics,
+            error=err,
+        )
+    except Exception as e:
+        return PhaseResult(
+            name="ruler", status="failed", metrics={},
+            elapsed_s=time.perf_counter() - t0, error=str(e),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -750,6 +826,7 @@ _PHASE_FNS = {
     "prefill_speed": _phase_prefill_speed,
     "humaneval_lite": _phase_humaneval_lite,
     "mmlu_pro": _phase_mmlu_pro,
+    "ruler": _phase_ruler,
 }
 
 
