@@ -208,6 +208,10 @@ class BenchConfig:
     ruler_suite: str = "quick"               # "quick" (6 tasks) or "full" (15 tasks)
     gate_ruler_mk_min: float = 0.80          # multi_key_niah@16K >= 80%
     gate_ruler_vt_min: float = 0.70          # variable_tracking@4K >= 70%
+    # LiveCodeBench (HX12.4) — opt-in via phases list
+    lcb_n_problems: int = 10
+    gate_lcb_min_pass_rate: float = 0.30
+    lcb_retries: int = 2
 
 
 # ---------------------------------------------------------------------------
@@ -815,6 +819,61 @@ def _phase_ruler(model, tokenizer, cfg: BenchConfig) -> PhaseResult:
 
 
 # ---------------------------------------------------------------------------
+# Phase: livecodebench (HX12.4)
+# ---------------------------------------------------------------------------
+
+
+def _phase_livecodebench(model, tokenizer, cfg: BenchConfig) -> PhaseResult:  # noqa: ANN001
+    """LiveCodeBench code-generation gate (HX12.4).
+
+    Generates code for competitive-programming problems, executes each in a
+    sandboxed subprocess, and checks stdout. Uses a CoT prompt + greedy-first
+    then sample-verify-with-retry loop (hypercar Tasks 254/255/258).
+
+    Default 10 problems. Gate: pass@1 >= 30% (hypercar Phase 3d MIN_LCB_PASS_RATE).
+
+    Enable via phases=['livecodebench'] or --phases smoke,coherence,livecodebench.
+    """
+    t0 = time.perf_counter()
+    try:
+        from gardener.bench.quality import run_livecodebench
+
+        result = run_livecodebench(
+            model, tokenizer,
+            n_problems=cfg.lcb_n_problems,
+            gate_min=cfg.gate_lcb_min_pass_rate,
+            retries=cfg.lcb_retries,
+            verbose=True,
+        )
+
+        status = "passed" if result.passed_gate else "failed"
+        failure_reason: str | None = None
+        if not result.passed_gate:
+            failure_reason = (
+                f"pass_rate {result.pass_rate:.0%} < gate {result.gate_min:.0%}"
+            )
+
+        return PhaseResult(
+            name="livecodebench",
+            status=status,
+            metrics={
+                "n_problems": result.n_problems,
+                "n_passed": result.n_passed,
+                "pass_rate": result.pass_rate,
+                "gate_min": result.gate_min,
+                "elapsed_s": result.elapsed_s,
+            },
+            elapsed_s=time.perf_counter() - t0,
+            error=failure_reason,
+        )
+    except Exception as e:
+        return PhaseResult(
+            name="livecodebench", status="failed", metrics={},
+            elapsed_s=time.perf_counter() - t0, error=str(e),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -827,6 +886,7 @@ _PHASE_FNS = {
     "humaneval_lite": _phase_humaneval_lite,
     "mmlu_pro": _phase_mmlu_pro,
     "ruler": _phase_ruler,
+    "livecodebench": _phase_livecodebench,
 }
 
 
