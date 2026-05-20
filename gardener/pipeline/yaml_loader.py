@@ -58,3 +58,17 @@ def _node_from_yaml(d: dict) -> Node:
         )
 
     return Node(body=body, **kw)
+
+
+def compose_pipeline(spec: str) -> "Pipeline":
+    """Auto-detect YAML vs prose by first non-blank, non-comment line.
+    Returns a validated Pipeline; raises ValueError on parse failure."""
+    for line in spec.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("pipeline "):
+            from .prose_parser import parse_pipeline_prose
+            return parse_pipeline_prose(spec)
+        return load_pipeline_yaml(spec)
+    raise ValueError("empty pipeline spec")
