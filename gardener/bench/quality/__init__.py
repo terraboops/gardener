@@ -13,6 +13,12 @@ from .ruler import (
     generate_multi_key_niah, generate_variable_tracking, generate_frequent_word,
     run_ruler_task, run_ruler_suite,
 )
+from .livecodebench import (
+    LCBProblem, LCBProblemResult, LCBResult,
+    LCB_RETRIES, LCB_RETRY_TEMP, LCB_TIMEOUT_S, LCB_MEMORY_MB,
+    load_livecodebench, format_prompt as lcb_format_prompt,
+    extract_last_code_block, execute_code, run_livecodebench,
+)
 
 __all__ = [
     "HUMANEVAL_LITE", "HumanEvalResult", "run_humaneval_lite",
@@ -22,4 +28,8 @@ __all__ = [
     "RULER_QUICK_SUITE", "RULER_FULL_SUITE",
     "generate_multi_key_niah", "generate_variable_tracking", "generate_frequent_word",
     "run_ruler_task", "run_ruler_suite",
+    "LCBProblem", "LCBProblemResult", "LCBResult",
+    "LCB_RETRIES", "LCB_RETRY_TEMP", "LCB_TIMEOUT_S", "LCB_MEMORY_MB",
+    "load_livecodebench", "lcb_format_prompt",
+    "extract_last_code_block", "execute_code", "run_livecodebench",
 ]
