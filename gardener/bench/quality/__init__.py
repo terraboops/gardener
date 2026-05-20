@@ -7,9 +7,19 @@ pass HumanEval?' style questions.
 """
 from .humaneval import HUMANEVAL_LITE, run_humaneval_lite, HumanEvalResult
 from .mmlu_pro import MMLUProResult, extract_answer, format_prompt, load_mmlu_pro, run_mmlu_pro
+from .ruler import (
+    RulerTaskResult, RulerSuiteResult,
+    RULER_QUICK_SUITE, RULER_FULL_SUITE,
+    generate_multi_key_niah, generate_variable_tracking, generate_frequent_word,
+    run_ruler_task, run_ruler_suite,
+)
 
 __all__ = [
     "HUMANEVAL_LITE", "HumanEvalResult", "run_humaneval_lite",
     "MMLUProResult", "extract_answer", "format_prompt",
     "load_mmlu_pro", "run_mmlu_pro",
+    "RulerTaskResult", "RulerSuiteResult",
+    "RULER_QUICK_SUITE", "RULER_FULL_SUITE",
+    "generate_multi_key_niah", "generate_variable_tracking", "generate_frequent_word",
+    "run_ruler_task", "run_ruler_suite",
 ]
