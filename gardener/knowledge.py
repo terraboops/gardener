@@ -134,6 +134,24 @@ class KnowledgeStore:
             # Re-construct to ensure all field defaults are consistent
             obj = KnowledgeObject(**asdict(obj))
             obj.updated_at = time.time()
+            # K3: collision detection — if same id exists but different content, raise
+            target = self._path(obj.id)
+            if target.exists():
+                try:
+                    existing = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
+                    existing_norm = sorted(
+                        _normalize_triple(t) for t in (existing.get("predicates") or [])
+                    )
+                    incoming_norm = sorted(_normalize_triple(t) for t in obj.predicates)
+                    if existing_norm != incoming_norm:
+                        raise RuntimeError(
+                            f"hash collision on {obj.id}: existing predicates "
+                            f"{existing_norm!r} differ from incoming {incoming_norm!r}"
+                        )
+                except RuntimeError:
+                    raise
+                except Exception:
+                    pass  # malformed existing file — allow overwrite
             # K1: evict before writing
             self._evict_to_cap(obj.id)
             # K5: atomic write
@@ -191,6 +209,153 @@ class KnowledgeStore:
                 self._path(oid),
                 yaml.safe_dump(asdict(obj), sort_keys=True),
             )
+
+    def merge(self, ids: list[str], into_predicates: list[list[str]]) -> str:
+        """K7: merge multiple knowledge objects into a single fresh one.
+
+        The new object's id is recomputed from ``into_predicates`` (may or may
+        not coincide with a source id — that is fine; if it does the source
+        entry is simply overwritten with the merged content).  Source files are
+        deleted after a successful write.
+        """
+        if len(ids) < 2:
+            raise ValueError(f"merge requires at least 2 ids, got {ids!r}")
+        with self._lock:
+            sources: list[KnowledgeObject] = []
+            for oid in ids:
+                p = self._path(oid)
+                if not p.exists():
+                    raise ValueError(f"merge: unknown id {oid!r}")
+                sources.append(KnowledgeObject(**yaml.safe_load(p.read_text(encoding="utf-8"))))
+
+            # K7: combine provenance fields
+            seen_insights: list[str] = []
+            seen_justs: list[str] = []
+            for src in sources:
+                if src.insight not in seen_insights:
+                    seen_insights.append(src.insight)
+                if src.justification not in seen_justs:
+                    seen_justs.append(src.justification)
+
+            idea_ctx: list[str] = []
+            seen_ctx: set[str] = set()
+            for src in sources:
+                for item in src.idea_context:
+                    if item not in seen_ctx:
+                        seen_ctx.add(item)
+                        idea_ctx.append(item)
+            idea_ctx = sorted(idea_ctx)
+
+            max_conf = max(src.confidence for src in sources)
+            emp_tested = any(src.empirical.get("tested") for src in sources)
+            emp_uses = sum(src.empirical.get("uses", 0) for src in sources)
+            emp_helped = sum(src.empirical.get("helped", 0) for src in sources)
+            lv_candidates = [
+                src.empirical.get("last_validated_at")
+                for src in sources
+                if src.empirical.get("last_validated_at") is not None
+            ]
+            emp_lv = max(lv_candidates) if lv_candidates else None
+
+            merged = KnowledgeObject(
+                predicates=into_predicates,
+                insight=" | ".join(seen_insights),
+                justification=" | ".join(seen_justs),
+                source_agent=self.agent,
+                idea_context=idea_ctx,
+                confidence=max_conf,
+                empirical={
+                    "tested": emp_tested,
+                    "uses": emp_uses,
+                    "helped": emp_helped,
+                    "last_validated_at": emp_lv,
+                },
+            )
+            # id is computed fresh from into_predicates by __post_init__
+            new_id = merged.id
+            merged.updated_at = time.time()
+
+            # Write merged object (K5 atomic; K3 collision check runs inside write
+            # but we hold the lock so call _atomic_write directly to avoid deadlock)
+            self._evict_to_cap(new_id)
+            self._atomic_write(
+                self._path(new_id),
+                yaml.safe_dump(asdict(merged), sort_keys=True),
+            )
+
+            # Delete source files (skip if source id == new_id — already overwritten)
+            for oid in ids:
+                if oid != new_id:
+                    try:
+                        self._path(oid).unlink()
+                    except OSError:
+                        pass
+
+            return new_id
+
+    def apply_curation(self, actions: list[dict]) -> None:
+        """K6: apply a validated list of curator actions.
+
+        Each action is a dict with ``action`` ∈ {keep, drop, merge}.
+
+        * ``keep``  — requires ``id`` (str); no-op.
+        * ``drop``  — requires ``id`` (str); deletes the file.
+        * ``merge`` — requires ``ids`` (list[str], ≥2) and
+          ``into_predicates`` (list of triples); calls ``self.merge()``.
+
+        Raises ``ValueError`` on any validation failure.  Never silently skips.
+        """
+        # Collect all known ids upfront for unknown-id checks
+        known_ids = {p.stem for p in self.dir.glob("*.yaml")}
+
+        for action_dict in actions:
+            if not isinstance(action_dict, dict):
+                raise ValueError(f"action must be a dict, got: {action_dict!r}")
+            action_type = action_dict.get("action")
+            if action_type not in ("keep", "drop", "merge"):
+                raise ValueError(
+                    f"unknown action {action_type!r} in: {action_dict!r}; "
+                    "must be one of keep/drop/merge"
+                )
+
+            if action_type in ("keep", "drop"):
+                if "id" not in action_dict:
+                    raise ValueError(f"action {action_type!r} requires 'id': {action_dict!r}")
+                oid = action_dict["id"]
+                if not isinstance(oid, str):
+                    raise ValueError(f"'id' must be str, got {type(oid).__name__!r}: {action_dict!r}")
+                if oid not in known_ids:
+                    raise ValueError(f"unknown id {oid!r} in action: {action_dict!r}")
+                if action_type == "drop":
+                    try:
+                        self._path(oid).unlink()
+                    except OSError:
+                        pass
+                    known_ids.discard(oid)
+                # keep → no-op
+
+            else:  # merge
+                if "ids" not in action_dict:
+                    raise ValueError(f"action 'merge' requires 'ids': {action_dict!r}")
+                if "into_predicates" not in action_dict:
+                    raise ValueError(f"action 'merge' requires 'into_predicates': {action_dict!r}")
+                merge_ids = action_dict["ids"]
+                if not isinstance(merge_ids, list) or len(merge_ids) < 2:
+                    raise ValueError(
+                        f"'ids' must be a list of ≥2 str ids: {action_dict!r}"
+                    )
+                for mid in merge_ids:
+                    if not isinstance(mid, str):
+                        raise ValueError(
+                            f"each element of 'ids' must be str, got {type(mid).__name__!r}: {action_dict!r}"
+                        )
+                    if mid not in known_ids:
+                        raise ValueError(f"unknown id {mid!r} in merge action: {action_dict!r}")
+                new_id = self.merge(merge_ids, action_dict["into_predicates"])
+                # Update known_ids to reflect the merge
+                for mid in merge_ids:
+                    known_ids.discard(mid)
+                known_ids.add(new_id)
 
     def consolidatable(self) -> Iterable[KnowledgeObject]:
         """K10: only tested knowledge is eligible for weight-tier consolidation."""

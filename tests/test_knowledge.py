@@ -99,6 +99,72 @@ def test_K8_concurrent_writers_no_lost_update(tmp_path):
     assert len({obj.id for obj in s.all()}) == 20  # no lost update
 
 
+def test_K3_collision_with_different_content_raises(tmp_path):
+    s = KnowledgeStore(tmp_path, agent="alpha")
+    a = KnowledgeObject(predicates=[["x", "r", "y"]], insight="A",
+                        justification="j", source_agent="alpha")
+    s.write(a)
+    # Force a collision: same id, different predicates.
+    b = KnowledgeObject(predicates=[["different", "r", "thing"]],
+                        insight="B", justification="j",
+                        source_agent="alpha", id=a.id)
+    with pytest.raises(RuntimeError, match="collision"):
+        s.write(b)
+
+
+def test_K3_same_content_is_upsert(tmp_path):
+    s = KnowledgeStore(tmp_path, agent="alpha")
+    a = KnowledgeObject(predicates=[["x", "r", "y"]], insight="A",
+                        justification="j", source_agent="alpha")
+    oid = s.write(a)
+    # Same predicates → same hash → upsert allowed.
+    a2 = KnowledgeObject(predicates=[["x", "r", "y"]], insight="A updated",
+                         justification="j", source_agent="alpha")
+    assert s.write(a2) == oid
+    assert s.get(oid).insight == "A updated"
+
+
+def test_K6_invalid_action_raises_loud(tmp_path):
+    s = KnowledgeStore(tmp_path, agent="alpha")
+    a = s.write(KnowledgeObject(predicates=[["a", "r", "b"]], insight="i",
+                                 justification="j", source_agent="alpha"))
+    with pytest.raises(ValueError):
+        s.apply_curation([{"action": "obliterate", "id": a}])  # bad action
+    with pytest.raises(ValueError):
+        s.apply_curation([{"action": "drop"}])                  # missing id
+    with pytest.raises(ValueError):
+        s.apply_curation([{"action": "merge", "ids": [a], "into_predicates": [["a", "r", "b"]]}])  # only 1 id
+
+
+def test_K6_valid_actions_apply(tmp_path):
+    s = KnowledgeStore(tmp_path, agent="alpha")
+    a = s.write(KnowledgeObject(predicates=[["a", "r", "b"]], insight="A",
+                                 justification="j", source_agent="alpha"))
+    b = s.write(KnowledgeObject(predicates=[["c", "r", "d"]], insight="B",
+                                 justification="j", source_agent="alpha"))
+    s.apply_curation([{"action": "drop", "id": a}])
+    assert {obj.id for obj in s.all()} == {b}
+
+
+def test_K7_merge_recomputes_id_and_combines_provenance(tmp_path):
+    s = KnowledgeStore(tmp_path, agent="alpha")
+    a = s.write(KnowledgeObject(predicates=[["x", "is", "y"]], insight="A",
+                                 justification="ja", source_agent="alpha",
+                                 idea_context=["idea-1"], confidence=0.6))
+    b = s.write(KnowledgeObject(predicates=[["x", "was", "y"]], insight="B",
+                                 justification="jb", source_agent="alpha",
+                                 idea_context=["idea-2"], confidence=0.8))
+    new_id = s.merge([a, b], into_predicates=[["x", "relates_to", "y"]])
+    # Sources gone; new id distinct.
+    assert new_id != a and new_id != b
+    surviving = {obj.id for obj in s.all()}
+    assert surviving == {new_id}
+    merged = s.get(new_id)
+    assert "A" in merged.insight and "B" in merged.insight
+    assert set(merged.idea_context) == {"idea-1", "idea-2"}
+    assert merged.confidence == 0.8
+
+
 def test_K9_idea_context_validated(tmp_path):
     with pytest.raises(ValueError):
         KnowledgeObject(predicates=[["a", "r", "b"]], insight="i",
