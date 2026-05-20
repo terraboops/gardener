@@ -6,5 +6,10 @@ agent-platform gates — they're how you answer 'does Gardener with this model
 pass HumanEval?' style questions.
 """
 from .humaneval import HUMANEVAL_LITE, run_humaneval_lite, HumanEvalResult
+from .mmlu_pro import MMLUProResult, extract_answer, format_prompt, load_mmlu_pro, run_mmlu_pro
 
-__all__ = ["HUMANEVAL_LITE", "run_humaneval_lite", "HumanEvalResult"]
+__all__ = [
+    "HUMANEVAL_LITE", "HumanEvalResult", "run_humaneval_lite",
+    "MMLUProResult", "extract_answer", "format_prompt",
+    "load_mmlu_pro", "run_mmlu_pro",
+]

@@ -200,6 +200,10 @@ class BenchConfig:
     # HumanEval-Lite (HX12.1) — opt-in via phases list
     humaneval_n_problems: int | None = None   # None = all 20
     gate_humaneval_min_pass_rate: float = 0.35
+    # MMLU-Pro (HX12.2) — opt-in via phases list
+    mmlu_pro_n_questions: int = 25            # quick default; bump to 100 for full gate
+    mmlu_pro_categories: list[str] | None = None  # None = all 14 categories
+    gate_mmlu_pro_min_accuracy: float = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -681,6 +685,60 @@ def _phase_humaneval_lite(model, tokenizer, cfg: BenchConfig) -> PhaseResult:
 
 
 # ---------------------------------------------------------------------------
+# Phase: mmlu_pro (HX12.2)
+# ---------------------------------------------------------------------------
+
+def _phase_mmlu_pro(model, tokenizer, cfg: BenchConfig) -> PhaseResult:
+    """Run the MMLU-Pro quality gate (CoT, 3-stage regex extraction).
+
+    Default 25 questions (quick). Bump mmlu_pro_n_questions to 100 for the
+    full hypercar gate (≥35% accuracy). enable_thinking=False is critical —
+    thinking blocks consume the token budget before the answer emerges,
+    collapsing Qwen3.6 from ~62% to ~22%.
+
+    Opt-in only — not in the default phases list. Enable via
+    phases=['mmlu_pro'] or --phases smoke,coherence,mmlu_pro on the CLI.
+    """
+    t0 = time.perf_counter()
+    try:
+        from gardener.bench.quality import run_mmlu_pro
+
+        result = run_mmlu_pro(
+            model, tokenizer,
+            n_questions=cfg.mmlu_pro_n_questions,
+            categories=cfg.mmlu_pro_categories,
+            gate_min=cfg.gate_mmlu_pro_min_accuracy,
+            enable_thinking=False,
+            verbose=logger.isEnabledFor(logging.DEBUG),
+        )
+        status = "passed" if result.passed_gate else "failed"
+        err = (
+            None if result.passed_gate
+            else (
+                f"accuracy {result.accuracy:.0%} < gate {result.gate_min:.0%} "
+                f"({result.n_correct}/{result.n_questions})"
+            )
+        )
+        return PhaseResult(
+            name="mmlu_pro", status=status,
+            elapsed_s=time.perf_counter() - t0,
+            metrics={
+                "accuracy": round(result.accuracy, 4),
+                "n_correct": result.n_correct,
+                "n_questions": result.n_questions,
+                "gate_min": result.gate_min,
+                "by_category": result.by_category,
+            },
+            error=err,
+        )
+    except Exception as e:
+        return PhaseResult(
+            name="mmlu_pro", status="failed", metrics={},
+            elapsed_s=time.perf_counter() - t0, error=str(e),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -691,6 +749,7 @@ _PHASE_FNS = {
     "decode_speed": _phase_decode_speed,
     "prefill_speed": _phase_prefill_speed,
     "humaneval_lite": _phase_humaneval_lite,
+    "mmlu_pro": _phase_mmlu_pro,
 }
 
 
