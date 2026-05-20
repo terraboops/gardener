@@ -66,6 +66,50 @@ Swap `ScriptedHumanRunner` for `CLIHumanRunner` in the demo and you'll answer th
 
 ---
 
+## Running hypercar-class — switching to a real model
+
+The default test model (`Qwen2.5-0.5B-Instruct-4bit`, ~300 MB) is great for testing the platform but doesn't exercise the HX-tier features at their intended scale. They were validated upstream on **`mlx-community/Qwen3.6-35B-A3B-4bit`** (~20 GB; needs M4 Pro 48 GB).
+
+To run Gardener with the production hypercar-class config:
+
+```python
+from mlx_lm import load
+from gardener.mlxsuper import (
+    DuoKVCache, load_duo_policy,
+    apply_prefill_last_logit_patch, apply_adaptive_prefill,
+    is_hybrid, attention_layer_indices,
+)
+
+# Load the 35B hybrid model
+model, tok = load("mlx-community/Qwen3.6-35B-A3B-4bit")
+
+# Long-context patches
+apply_prefill_last_logit_patch(model)            # required for >8K
+apply_adaptive_prefill(target_metal_pct=0.65)    # 512K-validated controller
+
+# Qwen3.6 is hybrid: only every 4th layer carries KV state (10/40).
+# That's why it fits 512K on 48 GB while dense Qwen3-Coder-30B hits the
+# ceiling at 256K.
+assert is_hybrid(model)
+attn_indices = attention_layer_indices(model)    # [3, 7, 11, …, 39]
+```
+
+`MInference (HX6)` is **opt-in** — the shipped calibration table is a synthetic placeholder. To get the 32K+ prefill speedup, run `scripts/minference_calibrate.py --model …` first to generate a real per-(layer, head) table.
+
+The phase-gated bench harness exposes a CLI:
+
+```bash
+python -m gardener.bench.cli \
+    --model mlx-community/Qwen3.6-35B-A3B-4bit \
+    --phases smoke,coherence,niah,decode_speed,prefill_speed,memory_profile \
+    --niah-context 16384 \
+    --n 8 --out report.json
+```
+
+Reports include the detected `swap_mode` (fast/slow/neutral via the < 5 GB / > 8 GB discriminator hypercar identified) so cross-run aggregation can stratify before averaging.
+
+---
+
 ## What's in the box
 
 ### 🧠 `mlxsuper` — stock `mlx-lm` made superpowered
@@ -197,15 +241,25 @@ This is a **v0 prototype** — the smallest end-to-end vertical that exercises t
 |---|---|
 | mlxsuper core (session save/load/fork/rewind, TTT, OPLoRA, schedules, observability) | Pi RPC harness adapter — see [seams](#future-seams) |
 | Composable-DAG pipeline IR + YAML loader + executor | Chalet-style git-projection human surface — see [seams](#future-seams) |
-| **Prose DSL + `compose_pipeline`** (agents author pipelines at runtime) | Concurrent decode from one warm cache (Tawa-style Metal warp-specialization) |
+| Prose DSL + `compose_pipeline` (agents author pipelines at runtime) | Concurrent decode from one warm cache (Tawa-style Metal warp-specialization) |
 | Journal + DLQ + re-drive | Full trellis-pool TLA+-verified lift (we ship a lite priority-queue scheduler) |
-| Knowledge store hardened (K1/K2/K3/K4/K5/K6/K7/K8/K9/K10) | |
-| **TTT sleep cycle + bit-equivalence promote gate** | |
-| **Priority-queue scheduler + cadence triggers** (lite) | |
-| **Block-pool pre-cached subagents** (warm caches, per-call fork) | |
+| Knowledge store hardened (K1–K10) | MInference real per-(layer, head) calibration (code ported; placeholder table ships) |
+| TTT sleep cycle + bit-equivalence promote gate | |
+| Priority-queue scheduler + cadence triggers (lite) | |
+| Block-pool pre-cached subagents (warm caches, per-call fork) | |
 | Cultivation hook wiring | |
 | Bidirectional human↔agent (`human` node kind) | |
 | MLX agent runner (local Apple Silicon model) | |
+| **HX: DuoKVCache** — fp16 streaming + 3-bit retrieval per head | |
+| **HX: TurboQuantKVCache (TQ3)** — WHT + Beta codebook + agentic save/load/fork | |
+| **HX: SnapKV eviction stack** — 8 essential layers; validated to 128K upstream | |
+| **HX: Adaptive prefill controller** — 512K-validated memory-aware chunking | |
+| **HX: `prefill_last_logit` patch** — unlocks contexts >8K | |
+| **HX: MInference sparse prefill** — code only (placeholder calibration) | |
+| **HX: Hybrid attention support** — enables Qwen3.6 (the 512K-validated model) | |
+| **HX: TTT-Linear head router** — bit-equivalence mode (Cycle 2 upstream-pending) | |
+| **HX: Speculative decoding wiring** — opt-in via `AgentProfile.draft_model` | |
+| **HX: Slim hypercar-style bench harness** — phase-gated, swap-mode stratified | |
 
 See [`docs/design.md`](docs/design.md) for the full design and [`docs/plans/`](docs/plans/) for the phase-by-phase plans.
 
