@@ -58,6 +58,20 @@ class TTTEngine:
             {"rank": rank, "scale": lora_scale, "dropout": 0.0},
         )
         self._svd_cache: dict[str, dict[str, mx.array]] = {}
+        self._checkpoint = None
+
+    # --- checkpoint / rewind -------------------------------------------------
+    def save_checkpoint(self) -> None:
+        """Snapshot current trainable (LoRA) parameters. Pairs with rewind()."""
+        self._checkpoint = _deepcopy_tree(self.model.trainable_parameters())
+        mx.eval(self._checkpoint)
+
+    def rewind(self) -> None:
+        """Restore the last saved checkpoint. No-op if no checkpoint exists."""
+        if getattr(self, "_checkpoint", None) is None:
+            return
+        self.model.update(self._checkpoint)
+        mx.eval(self.model.parameters())
 
     # --- candidate lifecycle -------------------------------------------------
     def generate_candidates(self, prompt: str, n: int = 4,
@@ -189,6 +203,18 @@ class TTTEngine:
 
         walk("model", grads, self.model)
         return grads
+
+
+def _deepcopy_tree(t):
+    """Deep-copy a nested dict/list/mx.array tree (used by save_checkpoint)."""
+    import mlx.core as mx
+    if isinstance(t, dict):
+        return {k: _deepcopy_tree(v) for k, v in t.items()}
+    if isinstance(t, list):
+        return [_deepcopy_tree(v) for v in t]
+    if isinstance(t, mx.array):
+        return mx.array(t)        # copy
+    return t
 
 
 def _tree_sgd(params, grads, lr):
