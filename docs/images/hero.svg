@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Gardener — a place to grow long-running agents on your own hardware.</title>
+  <desc id="desc">Hero banner for the Gardener project.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#f7fbf3"/>
+      <stop offset="100%" stop-color="#e6f1dc"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#6aa84f"/>
+      <stop offset="100%" stop-color="#38761d"/>
+    </linearGradient>
+    <linearGradient id="leaf2" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#93c47d"/>
+      <stop offset="100%" stop-color="#6aa84f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="1200" height="320" fill="url(#bg)"/>
+  <!-- subtle horizon line -->
+  <line x1="0" y1="280" x2="1200" y2="280" stroke="#cfe0bd" stroke-width="1"/>
+
+  <!-- sprout: two leaves + stem, simple, left side -->
+  <g transform="translate(120, 100)">
+    <!-- stem -->
+    <path d="M 60 180 Q 60 110 60 60" stroke="#38761d" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <!-- left leaf -->
+    <path d="M 60 110 Q 0 100 10 60 Q 50 50 60 110 Z" fill="url(#leaf)"/>
+    <!-- right leaf -->
+    <path d="M 60 90 Q 120 80 110 40 Q 70 35 60 90 Z" fill="url(#leaf2)"/>
+    <!-- pot rim -->
+    <rect x="20" y="180" width="80" height="14" rx="3" fill="#b6896b"/>
+    <!-- pot body -->
+    <path d="M 25 194 L 95 194 L 88 240 L 32 240 Z" fill="#8b5e3c"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="320" y="170" font-family="Georgia, 'Source Serif Pro', 'Times New Roman', serif"
+        font-size="96" font-weight="600" fill="#1f3a18" letter-spacing="-2">Gardener</text>
+
+  <!-- tagline -->
+  <text x="322" y="215" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace"
+        font-size="22" fill="#4a5a3a">
+    a place to grow long-running agents on your own hardware.
+  </text>
+
+  <!-- chips -->
+  <g transform="translate(322, 248)" font-family="ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace"
+     font-size="14" fill="#3a4a2c">
+    <rect x="0"   y="0" width="180" height="26" rx="13" fill="#dceacc" stroke="#b8d4a0"/>
+    <text x="14"  y="18">stock mlx_lm · superpowered</text>
+
+    <rect x="196" y="0" width="138" height="26" rx="13" fill="#dceacc" stroke="#b8d4a0"/>
+    <text x="210" y="18">Apple Silicon · local</text>
+
+    <rect x="350" y="0" width="106" height="26" rx="13" fill="#dceacc" stroke="#b8d4a0"/>
+    <text x="364" y="18">AGPL-3.0</text>
+  </g>
+</svg>

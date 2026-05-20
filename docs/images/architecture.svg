@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="t d">
+  <title id="t">Gardener architecture</title>
+  <desc id="d">Daemon layer (executor, journal, knowledge, cultivation hook) sits above the mlxsuper core (sessions, TTT, OPLoRA). Runners bridge to a local MLX model and humans.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fbfdf8"/>
+      <stop offset="100%" stop-color="#eef5e4"/>
+    </linearGradient>
+    <linearGradient id="daemon-fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f0f6e6"/>
+    </linearGradient>
+    <linearGradient id="mlx-fill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef9ef"/>
+      <stop offset="100%" stop-color="#fbeec9"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth"
+            markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6f44"/>
+    </marker>
+    <style><![CDATA[
+      .title  { font-family: Georgia, 'Source Serif Pro', serif; font-size: 28px; font-weight: 600; fill: #1f3a18; }
+      .group  { font-family: ui-monospace, Menlo, monospace; font-size: 14px; fill: #4a5a3a; letter-spacing: 1px; text-transform: uppercase; }
+      .box    { font-family: ui-monospace, Menlo, monospace; font-size: 17px; fill: #1f3a18; }
+      .sub    { font-family: ui-monospace, Menlo, monospace; font-size: 12px; fill: #5a6a48; }
+      .edge   { font-family: ui-monospace, Menlo, monospace; font-size: 12px; fill: #5a6f44; }
+    ]]></style>
+  </defs>
+
+  <rect width="1200" height="720" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="600" y="48" text-anchor="middle" class="title">Gardener architecture</text>
+  <text x="600" y="74" text-anchor="middle" class="sub">single-operator local agent platform · zero omlx import (CI-gated)</text>
+
+  <!-- =========================== DAEMON LAYER =========================== -->
+  <g>
+    <rect x="60" y="110" width="1080" height="370" rx="14" fill="url(#daemon-fill)" stroke="#9ab87f" stroke-width="2"/>
+    <text x="84" y="140" class="group">gardener daemon</text>
+
+    <!-- PipelineExecutor -->
+    <g transform="translate(96, 170)">
+      <rect width="280" height="120" rx="10" fill="#dceacc" stroke="#7fa45c"/>
+      <text x="20" y="34" class="box">PipelineExecutor</text>
+      <text x="20" y="58" class="sub">topological dispatch</text>
+      <text x="20" y="76" class="sub">node retry · timeout · deadline</text>
+      <text x="20" y="94" class="sub">composite sub-pipelines</text>
+      <text x="20" y="112" class="sub">DLQ on terminal failure</text>
+    </g>
+
+    <!-- EventJournal -->
+    <g transform="translate(96, 320)">
+      <rect width="280" height="120" rx="10" fill="#e8edd9" stroke="#9ab87f"/>
+      <text x="20" y="34" class="box">EventJournal</text>
+      <text x="20" y="58" class="sub">append-only JSONL per topic</text>
+      <text x="20" y="76" class="sub">topic: pipeline · session · …</text>
+      <text x="20" y="94" class="sub">topic: dead_letter</text>
+      <text x="20" y="112" class="sub">redrive_dlq() → re-runnable</text>
+    </g>
+
+    <!-- KnowledgeStore -->
+    <g transform="translate(460, 170)">
+      <rect width="280" height="120" rx="10" fill="#e2edd0" stroke="#7fa45c"/>
+      <text x="20" y="34" class="box">KnowledgeStore</text>
+      <text x="20" y="58" class="sub">typed KnowledgeObject (YAML)</text>
+      <text x="20" y="76" class="sub">predicates validated on write (K2)</text>
+      <text x="20" y="94" class="sub">empirical {tested, uses, helped}</text>
+      <text x="20" y="112" class="sub">consolidatable() ⟵ tested only (K10)</text>
+    </g>
+
+    <!-- CultivationHook -->
+    <g transform="translate(460, 320)">
+      <rect width="280" height="120" rx="10" fill="#dceacc" stroke="#7fa45c"/>
+      <text x="20" y="34" class="box">CultivationHook</text>
+      <text x="20" y="58" class="sub">record_success → mark_tested(+helped)</text>
+      <text x="20" y="76" class="sub">             → TTT.feedback(+1, "solution")</text>
+      <text x="20" y="94" class="sub">record_failure → mark_tested(-helped)</text>
+      <text x="20" y="112" class="sub">             → TTT.feedback(-1)</text>
+    </g>
+
+    <!-- AgentRunner / HumanRunner -->
+    <g transform="translate(820, 170)">
+      <rect width="280" height="120" rx="10" fill="#f4f0d8" stroke="#c7b34e"/>
+      <text x="20" y="34" class="box">AgentRunner</text>
+      <text x="20" y="58" class="sub">MLXAgentRunner ⟶ local MLX model</text>
+      <text x="20" y="76" class="sub">tokenizer.apply_chat_template()</text>
+      <text x="20" y="94" class="sub">fresh prompt cache per call (v0)</text>
+      <text x="20" y="112" class="sub">extensible: any callable(node, inputs)</text>
+    </g>
+
+    <g transform="translate(820, 320)">
+      <rect width="280" height="120" rx="10" fill="#f4f0d8" stroke="#c7b34e"/>
+      <text x="20" y="34" class="box">HumanRunner</text>
+      <text x="20" y="58" class="sub">CLIHumanRunner ⟶ stdin</text>
+      <text x="20" y="76" class="sub">ScriptedHumanRunner ⟶ demos/tests</text>
+      <text x="20" y="94" class="sub">required: timeout + on_timeout</text>
+      <text x="20" y="112" class="sub">peer of AgentRunner, not a gate</text>
+    </g>
+
+    <!-- inner arrows -->
+    <line x1="236" y1="290" x2="236" y2="320" stroke="#5a6f44" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="244" y="310" class="edge">every step</text>
+
+    <line x1="600" y1="290" x2="600" y2="320" stroke="#5a6f44" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="608" y="310" class="edge">outcome</text>
+
+    <line x1="376" y1="220" x2="460" y2="220" stroke="#5a6f44" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="740" y1="220" x2="820" y2="220" stroke="#5a6f44" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="380" y="212" class="edge">reads</text>
+    <text x="744" y="212" class="edge">dispatch</text>
+  </g>
+
+  <!-- =========================== MLXSUPER LAYER =========================== -->
+  <g>
+    <rect x="60" y="510" width="1080" height="170" rx="14" fill="url(#mlx-fill)" stroke="#c7b34e" stroke-width="2"/>
+    <text x="84" y="540" class="group">mlxsuper — stock mlx_lm made superpowered</text>
+
+    <g transform="translate(96, 560)">
+      <rect width="320" height="100" rx="10" fill="#fff6dc" stroke="#c7b34e"/>
+      <text x="20" y="32" class="box">SessionPool</text>
+      <text x="20" y="56" class="sub">save / load (bit-stable, no re-prefill)</text>
+      <text x="20" y="74" class="sub">fork (independent branch)</text>
+      <text x="20" y="92" class="sub">rewind (O(1) tail drop · cache.trim)</text>
+    </g>
+
+    <g transform="translate(440, 560)">
+      <rect width="320" height="100" rx="10" fill="#fff6dc" stroke="#c7b34e"/>
+      <text x="20" y="32" class="box">TTTEngine</text>
+      <text x="20" y="56" class="sub">LoRA via mlx_lm.tuner</text>
+      <text x="20" y="74" class="sub">generate · feedback · train_step</text>
+      <text x="20" y="92" class="sub">manual SGD + optional OPLoRA</text>
+    </g>
+
+    <g transform="translate(784, 560)">
+      <rect width="320" height="100" rx="10" fill="#fff6dc" stroke="#c7b34e"/>
+      <text x="20" y="32" class="box">OPLoRA · schedules · observability</text>
+      <text x="20" y="56" class="sub">project_lora_grads — drift-bounded steps</text>
+      <text x="20" y="74" class="sub">compute_layer_lrs (uniform/reservoir/cosine)</text>
+      <text x="20" y="92" class="sub">timer · counter · registry · median_of_n</text>
+    </g>
+  </g>
+
+  <!-- daemon → mlxsuper edges -->
+  <line x1="600" y1="480" x2="600" y2="510" stroke="#5a6f44" stroke-width="1.5" marker-end="url(#arrow)"/>
+</svg>

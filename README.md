@@ -1,4 +1,8 @@
-# 🌱 Gardener
+<p align="center">
+  <img src="docs/images/hero.svg" alt="Gardener — a place to grow long-running agents on your own hardware." width="900"/>
+</p>
+
+# Gardener
 
 **A place to grow long-running agents on your own hardware.**
 
@@ -144,27 +148,9 @@ list(store.consolidatable())   # ← now eligible for the slow-tier learning cyc
 
 ## Architecture
 
-```
-                ┌──────────────────── Gardener daemon ────────────────────┐
-                │                                                          │
-   submit(pipe) │   PipelineExecutor ──dispatch──▶  AgentRunner            │
-       ───────▶ │      ▲                              (MLXAgentRunner ───┐ │
-                │      │                                                 │ │
-                │      │                            HumanRunner          │ │
-                │      │                              (Scripted/CLI)     │ │
-                │      │                                                 │ │
-                │   EventJournal  ◀─every step─                          │ │
-                │   (JSONL + DLQ)                                        │ │
-                │      │                                                 │ │
-                │   KnowledgeStore ◀─CultivationHook─ outcome            │ │
-                │   (empirical gate)                                     │ │
-                └────────────────────────────────────────────────────────┼─┘
-                                                                         │
-                              ┌──────────────────────────────────────────┴─┐
-                              │           mlxsuper (stock mlx_lm +)         │
-                              │  SessionPool · TTTEngine · OPLoRA · …       │
-                              └──────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/images/architecture.svg" alt="Architecture: daemon (executor, journal, knowledge, cultivation hook, runners) above the mlxsuper core (sessions, TTT, OPLoRA)." width="900"/>
+</p>
 
 ---
 
