@@ -8,6 +8,10 @@
    gardener swarm PIPELINE [--agent NAME ...] [--inputs JSON] [--journal-root DIR]
                            [--max-concurrent N] [--priority P] [--timeout S]
    gardener observe NAME-OR-PATH [--topic TOPIC] [--follow] [-n N]
+   gardener cache warm AGENT [--text TEXT | --file FILE | --use-prompt-md] [--name NAME]
+   gardener cache list AGENT
+   gardener cache rm AGENT CACHE_NAME
+   gardener cache use AGENT CACHE_NAME "QUESTION"
 """
 from __future__ import annotations
 
@@ -15,6 +19,12 @@ import argparse
 import sys
 from typing import Sequence
 
+from .commands.cache import (
+    cmd_cache_list,
+    cmd_cache_rm,
+    cmd_cache_use,
+    cmd_cache_warm,
+)
 from .commands.init import cmd_init
 from .commands.list import cmd_list_agents
 from .commands.observe import cmd_observe
@@ -139,6 +149,53 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip the final confirmation prompt.",
     )
     s.set_defaults(func=cmd_wizard)
+
+    # --- cache subcommands ---------------------------------------------------
+    cache_parser = sub.add_parser(
+        "cache", help="Manage warm subagent KV caches."
+    )
+    cache_sub = cache_parser.add_subparsers(dest="cache_cmd", required=True)
+
+    w = cache_sub.add_parser("warm", help="Pre-fill a warm context cache.")
+    w.add_argument("agent")
+    w.add_argument(
+        "--text",
+        default=None,
+        help="Warmup text to prefill into the cache.",
+    )
+    w.add_argument(
+        "--file",
+        default=None,
+        help="Read warmup text from a file.",
+    )
+    w.add_argument(
+        "--use-prompt-md",
+        action="store_true",
+        help="Use the agent's prompt.md as the warmup text (default).",
+    )
+    w.add_argument(
+        "--name",
+        default=None,
+        help="Cache name. Default: warm-<sha256[:12]>.",
+    )
+    w.set_defaults(func=cmd_cache_warm)
+
+    ll = cache_sub.add_parser("list", help="List warm caches for an agent.")
+    ll.add_argument("agent")
+    ll.set_defaults(func=cmd_cache_list)
+
+    r = cache_sub.add_parser("rm", help="Delete a warm cache.")
+    r.add_argument("agent")
+    r.add_argument("cache_name")
+    r.set_defaults(func=cmd_cache_rm)
+
+    u = cache_sub.add_parser(
+        "use", help="Run a one-shot query against a warm cache."
+    )
+    u.add_argument("agent")
+    u.add_argument("cache_name")
+    u.add_argument("question")
+    u.set_defaults(func=cmd_cache_use)
 
     return p
 
