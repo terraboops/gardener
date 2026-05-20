@@ -388,11 +388,13 @@ def run_livecodebench(
             prompt = prompt_text + "\n"
 
         # --- Attempt 0: greedy (temp=0) ---
+        # mlx_lm.generate takes a sampler, not a temp= kwarg.
+        from mlx_lm.sample_utils import make_sampler
         response = generate(
             model, tokenizer,
             prompt=prompt,
             max_tokens=max_tokens,
-            temp=0.0,
+            sampler=make_sampler(temp=0.0),
         )
         code = extract_last_code_block(response)
         passed, last_error = _passes_test_cases(code, prob)
@@ -401,13 +403,11 @@ def run_livecodebench(
         # --- Retries with temp>0 if greedy failed ---
         if not passed:
             for retry_i in range(retries):
-                r_seed = retry_i + 1
                 r_response = generate(
                     model, tokenizer,
                     prompt=prompt,
                     max_tokens=max_tokens,
-                    temp=retry_temp,
-                    seed=r_seed,
+                    sampler=make_sampler(temp=retry_temp),
                 )
                 r_code = extract_last_code_block(r_response)
                 r_passed, r_error = _passes_test_cases(r_code, prob)
