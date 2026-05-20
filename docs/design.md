@@ -582,6 +582,26 @@ version map).
 
 ---
 
+## Why Pi RPC + Chalet UI are deferred from v0
+
+Both are architecturally significant — and both are *interface-bound* in a
+way that lets them ship later without breaking the v0 surface.
+
+- **Pi RPC harness adapter.** `AgentRunner` is already a Protocol; a Pi
+  adapter is one `(Node, dict) -> str` implementation. The prototype uses
+  `MLXAgentRunner` because v0 is single-operator local — the value of Pi is
+  multi-process / multi-machine fan-out, which only matters once the
+  scheduler is the full TLA+-verified trellis lift (still deferred). Doing
+  Pi now would build the adapter against a scheduler we're going to replace.
+- **Chalet-style human surface.** `HumanRunner` is also a Protocol;
+  `ScriptedHumanRunner` and `CLIHumanRunner` cover the prototype's needs.
+  Chalet is a full Tauri+Svelte desktop application — its value is realized
+  when multiple humans collaborate on agent-produced artifacts, which v0's
+  single-operator scope can't motivate. The git-projection storage model is
+  pinned in the design so the adapter has a clear target whenever it ships.
+
+---
+
 ## Open questions for the implementation plan
 
 - ~~Where does the Gardener live?~~ **Resolved:** its own repo at

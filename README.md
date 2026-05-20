@@ -195,15 +195,52 @@ This is a **v0 prototype** — the smallest end-to-end vertical that exercises t
 
 | In v0 ✅ | Deferred 📋 |
 |---|---|
-| mlxsuper core (session save/load/fork/rewind, TTT, OPLoRA, schedules, observability) | Block-pool pre-cached subagent swarm |
-| Composable-DAG pipeline IR + YAML loader + executor | Prose DSL, visual composer, agent-authored `compose_pipeline` at runtime |
-| Journal + DLQ + re-drive | Trellis scheduler lift + priority/starvation/deadline hardening (Phase 2) |
-| Knowledge store with K2 (strict validation) + K10 (empirical gate) | K1/K3-K9 deep knowledge defects (Phase 4) |
-| Cultivation hook wiring | Full TTT "sleep" cycle + bit-equivalence promote gate (Phase 5) |
-| Bidirectional human↔agent (`human` node kind) | Chalet-style git-projection human surface |
-| MLX agent runner (local Apple Silicon model) | Pi RPC harness adapter |
+| mlxsuper core (session save/load/fork/rewind, TTT, OPLoRA, schedules, observability) | Pi RPC harness adapter — see [seams](#future-seams) |
+| Composable-DAG pipeline IR + YAML loader + executor | Chalet-style git-projection human surface — see [seams](#future-seams) |
+| **Prose DSL + `compose_pipeline`** (agents author pipelines at runtime) | Concurrent decode from one warm cache (Tawa-style Metal warp-specialization) |
+| Journal + DLQ + re-drive | Full trellis-pool TLA+-verified lift (we ship a lite priority-queue scheduler) |
+| Knowledge store hardened (K1/K2/K3/K4/K5/K6/K7/K8/K9/K10) | |
+| **TTT sleep cycle + bit-equivalence promote gate** | |
+| **Priority-queue scheduler + cadence triggers** (lite) | |
+| **Block-pool pre-cached subagents** (warm caches, per-call fork) | |
+| Cultivation hook wiring | |
+| Bidirectional human↔agent (`human` node kind) | |
+| MLX agent runner (local Apple Silicon model) | |
 
 See [`docs/design.md`](docs/design.md) for the full design and [`docs/plans/`](docs/plans/) for the phase-by-phase plans.
+
+---
+
+## Future seams
+
+Two architecturally-significant pieces are deliberately deferred — their
+**interfaces** are in place so they can drop in without breaking changes:
+
+### Pi RPC harness adapter
+
+Gardener's `AgentRunner` is a `Protocol` (`gardener/harness/__init__.py`) — any
+`(Node, dict) -> str` callable works. The shipped `MLXAgentRunner` talks
+directly to a local MLX model; a Pi RPC adapter would wrap Pi's stdin/stdout
+RPC protocol behind the same interface so a Gardener pipeline can dispatch a
+node to a Pi-hosted agent without the executor knowing the difference.
+
+The pre-cached `SubagentRegistry` is the natural Pi-side counterpart: each
+profile maps to a warm Pi session.
+
+### Chalet-style git-projection human surface
+
+`HumanRunner` is also a `Protocol`. The shipped `CLIHumanRunner` blocks for
+stdin, `ScriptedHumanRunner` is for tests/demos. A Chalet adapter would write
+the `node.ask` (with `inputs`) as a Markdown document to a per-task git repo,
+let a human (or another agent) edit + commit a structured response, then
+read the response back into the typed `node.response_schema` shape. The
+projection is bidirectional from v1: the agent's "ask" is delivered as a
+document; the human's reply is committed back as a structured artifact the
+executor consumes like any node output.
+
+Both seams keep the v0 commitment intact: agents and humans are equal
+graph citizens; nothing about adding a remote agent or a richer human UI
+disturbs the existing pipeline IR, executor, journal, or knowledge surfaces.
 
 ---
 
@@ -220,7 +257,7 @@ See [`docs/design.md`](docs/design.md) for the full design and [`docs/plans/`](d
 .venv/bin/python scripts/check_no_omlx_import.py
 ```
 
-Current: **39 fast + 6 model tests passing.**
+Current: **57 fast + 12 model tests passing.**
 
 ---
 
