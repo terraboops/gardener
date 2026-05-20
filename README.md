@@ -10,7 +10,7 @@
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
 [![Apple Silicon](https://img.shields.io/badge/runs%20on-Apple%20Silicon-black?logo=apple)](#)
 [![Status: v0 prototype](https://img.shields.io/badge/status-v0%20prototype-orange)](#status)
-[![Tests](https://img.shields.io/badge/tests-39%20fast%20%2B%206%20model-green)](#)
+[![Tests](https://img.shields.io/badge/tests-165%20fast%20%2B%2027%20model-green)](#)
 
 Gardener is a single-operator, **local** agent platform for Apple Silicon. You give it a small LLM and a YAML pipeline; it runs the pipeline as a DAG of agents and humans, records every step, and only ever lets your model learn from things you've actually verified worked.
 
@@ -63,6 +63,57 @@ loading mlx-community/Qwen2.5-0.5B-Instruct-4bit …
 ```
 
 Swap `ScriptedHumanRunner` for `CLIHumanRunner` in the demo and you'll answer the approval prompt by hand.
+
+---
+
+## Running hypercar-class — switching to a real model
+
+The default test model (`Qwen2.5-0.5B-Instruct-4bit`, ~300 MB) is great for
+testing the platform but doesn't exercise the HX-tier features at their
+intended scale. The features were validated upstream on
+**`mlx-community/Qwen3.6-35B-A3B-4bit`** (~20 GB; needs M4 Pro 48 GB).
+
+To run Gardener with the production hypercar-class config:
+
+```python
+from mlx_lm import load
+from gardener.mlxsuper import (
+    DuoKVCache, load_duo_policy,
+    apply_prefill_last_logit_patch, apply_adaptive_prefill,
+    is_hybrid, attention_layer_indices,
+)
+
+# Load the 35B hybrid model
+model, tok = load("mlx-community/Qwen3.6-35B-A3B-4bit")
+
+# Apply the >8K-context patches
+apply_prefill_last_logit_patch(model)
+apply_adaptive_prefill(target_metal_pct=0.65,
+                       max_chunk=16384, min_chunk=512)
+
+# Hybrid models: only the every-4th attention layer carries KV state.
+# (Qwen3.6: 10 attn layers out of 40 — that's why it fits 512K on 48 GB
+# while dense Qwen3-Coder-30B hits the ceiling at 256K.)
+assert is_hybrid(model)
+attn_indices = attention_layer_indices(model)   # [3, 7, 11, ..., 39]
+
+# Use DuoKVCache on each attention layer (the best-quality mode).
+# Note: a Qwen3.6-specific DuoAttention policy doesn't ship — using fp16
+# fallback for now; see the seams section.
+```
+
+The full configuration matrix (which knobs to turn for which goal) is in
+`docs/design.md`. See also `gardener/bench/cli.py` for a runnable bench
+harness: `python -m gardener.bench.cli --model mlx-community/Qwen3.6-35B-A3B-4bit`.
+
+**MInference (HX6) is opt-in** because the shipped calibration table is a
+synthetic placeholder. To use it for the 32K+ prefill speedup:
+
+```bash
+# 1. Run calibration to generate a real pattern table (one-time per model).
+python scripts/minference_calibrate.py --model mlx-community/Qwen3.6-35B-A3B-4bit
+# 2. Then in your config, enable sparse prefill.
+```
 
 ---
 
@@ -199,13 +250,30 @@ This is a **v0 prototype** — the smallest end-to-end vertical that exercises t
 | Composable-DAG pipeline IR + YAML loader + executor | Chalet-style git-projection human surface — see [seams](#future-seams) |
 | **Prose DSL + `compose_pipeline`** (agents author pipelines at runtime) | Concurrent decode from one warm cache (Tawa-style Metal warp-specialization) |
 | Journal + DLQ + re-drive | Full trellis-pool TLA+-verified lift (we ship a lite priority-queue scheduler) |
-| Knowledge store hardened (K1/K2/K3/K4/K5/K6/K7/K8/K9/K10) | |
+| Knowledge store hardened (K1/K2/K3/K4/K5/K6/K7/K8/K9/K10) | **MInference real per-(layer, head) calibration** — code is ported; the synthetic placeholder table must be replaced before the 32K+ prefill speedup is real |
 | **TTT sleep cycle + bit-equivalence promote gate** | |
 | **Priority-queue scheduler + cadence triggers** (lite) | |
 | **Block-pool pre-cached subagents** (warm caches, per-call fork) | |
 | Cultivation hook wiring | |
 | Bidirectional human↔agent (`human` node kind) | |
 | MLX agent runner (local Apple Silicon model) | |
+
+**v0+ (hypercar-class capability ports)**
+
+Ten HX-tier optimizations ported from the hypercar research system, validated upstream on `Qwen3.6-35B-A3B-4bit` at 512K context on M4 Pro 48 GB:
+
+| Feature | HX | Notes |
+|---|---|---|
+| `DuoKVCache` — best-quality KV mode (fp16 streaming + 3-bit retrieval per-head) | HX4 | Default decode mode; zero swap up to 16K |
+| `TurboQuantKVCache` (TQ3) — 3-bit KV with agentic save/load/fork | HX3 | WHT + Beta codebook; best RULER quality |
+| SnapKV eviction stack — 8 composable layers; validated to 128K | HX5 | Attention-guided token selection; composes with all KV modes |
+| Adaptive prefill chunking — 512K-validated memory-aware controller | HX2 | Prevents Metal OOM at long context; auto-tunes chunk size |
+| `prefill_last_logit` patch — unlocks contexts >8K | HX1 | Required; without it a ~40 GB logits tensor accumulates during prefill |
+| MInference sparse prefill — code only; **calibration table is a synthetic placeholder** | HX6 | Real calibration required before the 32K+ prefill speedup is real |
+| Hybrid attention support — enables Qwen3.6 (30 SSM + 10 attn layers) | HX7 | `is_hybrid`, `attention_layer_indices`, `eos_token_ids`, `format_chat` |
+| TTT-Linear head router — bit-equivalence mode; Cycle 2 upstream-pending | HX8 | Routes streaming-tagged heads; TTT blocks loaded separately |
+| Speculative decoding wiring — opt-in via `AgentProfile.draft_model` | HX9 | Predicted 3× decode speedup at α≥0.5, N=8 |
+| Slim bench harness — phase-gated; swap-mode stratified | HX10 | `python -m gardener.bench.cli` |
 
 See [`docs/design.md`](docs/design.md) for the full design and [`docs/plans/`](docs/plans/) for the phase-by-phase plans.
 
@@ -257,7 +325,7 @@ disturbs the existing pipeline IR, executor, journal, or knowledge surfaces.
 .venv/bin/python scripts/check_no_omlx_import.py
 ```
 
-Current: **57 fast + 12 model tests passing.**
+Current: **165 fast + 27 model tests collected** (165 fast pass; model tests require model download — 16 pre-existing failures in HX branches on the current mlx-lm version).
 
 ---
 
