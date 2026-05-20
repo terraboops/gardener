@@ -17,6 +17,7 @@ from .commands.list import cmd_list_agents
 from .commands.query import cmd_query
 from .commands.remove import cmd_remove
 from .commands.update import cmd_update
+from .commands.wizard import cmd_wizard
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,6 +63,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("name")
     s.set_defaults(func=cmd_remove)
+
+    s = sub.add_parser("wizard", help="Interactive agent creator.")
+    s.add_argument(
+        "--inline",
+        nargs="*",
+        default=None,
+        help=(
+            "Non-interactive: KEY=VALUE pairs (name, description, "
+            "purpose, model, temperature, max_tokens, path, "
+            "seed_knowledge, force)."
+        ),
+    )
+    s.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip the final confirmation prompt.",
+    )
+    s.set_defaults(func=cmd_wizard)
 
     return p
 
