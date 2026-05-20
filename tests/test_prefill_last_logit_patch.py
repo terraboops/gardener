@@ -84,12 +84,23 @@ def test_missing_attrs_returns_false():
 # --- model integration --------------------------------------------------------
 
 @pytest.mark.model
-def test_real_model_prefill_returns_single_token_logits(loaded_model):
+def test_real_model_prefill_returns_single_token_logits():
     """On a real loaded mlx_lm model, multi-token prefill with cache returns
-    only one timestep of logits."""
+    only one timestep of logits.
+
+    IMPORTANT: this test deliberately loads a FRESH model rather than using
+    the session-scoped `loaded_model` fixture. The patch swaps the model's
+    `__class__` and that mutation persists for the rest of the session — if
+    we patched the shared fixture here, subsequent model tests would see a
+    patched backbone whose multi-token-prefill path drops `mask=`, which in
+    turn falls into an mlx_lm SDPA branch that's incompatible with the
+    installed mlx's `quantized_matmul` signature on a 4-bit model. Loading
+    a fresh model here keeps the patch's effect bounded to this test.
+    """
+    from mlx_lm import load
     from mlx_lm.models.cache import make_prompt_cache
-    model, tok = loaded_model
-    # Apply patch (idempotent if test_subagents already loaded the model).
+    from tests.conftest import TEST_MODEL
+    model, tok = load(TEST_MODEL)
     apply_prefill_last_logit_patch(model)
     cache = make_prompt_cache(model)
     ids = mx.array([tok.encode("The capital of France is")])
