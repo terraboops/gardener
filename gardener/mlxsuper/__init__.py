@@ -4,6 +4,7 @@ from .oplora import compute_svd_cache, project_lora_grads
 from .schedules import compute_layer_lrs
 from .session import SessionPool
 from .ttt import Candidate, TrainStats, TTTEngine
+from .turboquant_kv import TurboQuantKVCache
 
 __all__ = [
     "SessionPool",
@@ -11,4 +12,5 @@ __all__ = [
     "compute_layer_lrs",
     "project_lora_grads", "compute_svd_cache",
     "timer", "counter", "registry", "median_of_n",
+    "TurboQuantKVCache",
 ]
