@@ -197,6 +197,9 @@ class BenchConfig:
     gate_niah_required: bool = True
     gate_decode_min_tok_s: float = 5.0
     gate_prefill_min_tok_s: float = 50.0
+    # HumanEval-Lite (HX12.1) — opt-in via phases list
+    humaneval_n_problems: int | None = None   # None = all 20
+    gate_humaneval_min_pass_rate: float = 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -630,6 +633,54 @@ def _phase_memory_profile(swap_at_start: float) -> PhaseResult:
 
 
 # ---------------------------------------------------------------------------
+# Phase: humaneval_lite (HX12.1)
+# ---------------------------------------------------------------------------
+
+def _phase_humaneval_lite(model, tokenizer, cfg: BenchConfig) -> PhaseResult:
+    """Run the HumanEval-Lite quality gate (20 problems, exec+assert).
+
+    Opt-in only — not in the default phases list because each problem takes
+    seconds on a production model. Enable via phases=['humaneval_lite'] or
+    --phases smoke,coherence,humaneval_lite on the CLI.
+    """
+    t0 = time.perf_counter()
+    try:
+        from gardener.bench.quality import run_humaneval_lite
+
+        result = run_humaneval_lite(
+            model, tokenizer,
+            n_problems=cfg.humaneval_n_problems,
+            gate_min=cfg.gate_humaneval_min_pass_rate,
+            verbose=logger.isEnabledFor(logging.DEBUG),
+        )
+        status = "passed" if result.passed_gate else "failed"
+        err = (
+            None if result.passed_gate
+            else (
+                f"pass_rate {result.pass_rate:.0%} < gate {result.gate_min:.0%} "
+                f"({result.n_passed}/{result.n_problems})"
+            )
+        )
+        return PhaseResult(
+            name="humaneval_lite", status=status,
+            elapsed_s=time.perf_counter() - t0,
+            metrics={
+                "pass_rate": round(result.pass_rate, 4),
+                "n_passed": result.n_passed,
+                "n_problems": result.n_problems,
+                "gate_min": result.gate_min,
+                "per_problem": result.per_problem,
+            },
+            error=err,
+        )
+    except Exception as e:
+        return PhaseResult(
+            name="humaneval_lite", status="failed", metrics={},
+            elapsed_s=time.perf_counter() - t0, error=str(e),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -639,6 +690,7 @@ _PHASE_FNS = {
     "niah": _phase_niah,
     "decode_speed": _phase_decode_speed,
     "prefill_speed": _phase_prefill_speed,
+    "humaneval_lite": _phase_humaneval_lite,
 }
 
 
@@ -667,16 +719,7 @@ def run_bench(config: BenchConfig) -> BenchReport:
             result = _phase_memory_profile(swap_at_start)
         elif phase_name in _PHASE_FNS:
             fn = _PHASE_FNS[phase_name]
-            if phase_name in ("smoke", "coherence", "decode_speed", "prefill_speed"):
-                result = fn(model, tokenizer, config)
-            elif phase_name == "niah":
-                result = fn(model, tokenizer, config)
-            else:
-                result = PhaseResult(
-                    name=phase_name, status="skipped",
-                    metrics={}, elapsed_s=0.0,
-                    error="unknown phase",
-                )
+            result = fn(model, tokenizer, config)
         else:
             result = PhaseResult(
                 name=phase_name, status="skipped",
