@@ -1,5 +1,11 @@
 """Superpowered-MLX core: stock mlx_lm made persistent/forkable/learnable."""
 from .duo_kv_cache import DuoKVCache, StreamingKVCache, load_duo_policy
+from .hybrid import (
+    attention_layer_indices,
+    eos_token_ids,
+    format_chat,
+    is_hybrid,
+)
 from .observability import counter, median_of_n, registry, timer
 from .oplora import compute_svd_cache, project_lora_grads
 from .patches.ttt_head_router import TTTHeadRouter
@@ -19,4 +25,8 @@ __all__ = [
     "timer", "counter", "registry", "median_of_n",
     "TurboQuantKVCache",
     "SnapKVOptions", "snapkv_select", "compact_cache",
+    "attention_layer_indices",
+    "is_hybrid",
+    "eos_token_ids",
+    "format_chat",
 ]
