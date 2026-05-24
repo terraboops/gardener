@@ -1,11 +1,16 @@
-"""gardener cache — warm/list/rm pre-loaded subagent contexts."""
+"""gardener cache — warm/list/rm pre-loaded subagent contexts.
+
+`subagents` is imported lazily inside the warm/use functions because it
+transitively pulls in `mlx_lm`, which is Mac-only. Lazy import lets the
+CLI (and its no-MLX subcommands, e.g. wizard/list/observe/calibrate) load
+in a Linux CI environment without MLX installed.
+"""
 from __future__ import annotations
 
 import hashlib
 import sys
 from pathlib import Path
 
-from ...subagents import AgentProfile, SubagentRegistry
 from ..agent_dir import load_agent, load_prompt
 from ..registry import resolve
 
@@ -60,6 +65,7 @@ def cmd_cache_warm(args) -> int:
     print(f"[cache] loading model {cfg.model} ...", file=sys.stderr, flush=True)
     try:
         from mlx_lm import load
+        from ...subagents import AgentProfile, SubagentRegistry
     except ImportError as e:
         print(f"gardener cache warm: mlx_lm not available: {e}", file=sys.stderr)
         return 1
@@ -151,6 +157,7 @@ def cmd_cache_use(args) -> int:
     print(f"[cache] loading model {cfg.model} ...", file=sys.stderr, flush=True)
     try:
         from mlx_lm import load
+        from ...subagents import AgentProfile, SubagentRegistry
     except ImportError as e:
         print(f"gardener cache use: mlx_lm not available: {e}", file=sys.stderr)
         return 1
