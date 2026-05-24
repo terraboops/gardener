@@ -217,6 +217,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the final confirmation prompt.",
     )
+    s.add_argument(
+        "--drafter",
+        default=None,
+        help=(
+            "HF model id of a local LLM to draft system prompt + seed "
+            "knowledge from the purpose. When unset, uses the static "
+            "template (existing Q2 behavior)."
+        ),
+    )
+    s.add_argument(
+        "--mock-drafter-fixtures",
+        default=None,
+        dest="mock_drafter_fixtures",
+        help=(
+            "Test-only: replay drafter responses from a fixture YAML. "
+            "Bypasses MLX inference. Overrides --drafter when set."
+        ),
+    )
     s.set_defaults(func=cmd_wizard)
 
     # --- cache subcommands ---------------------------------------------------
