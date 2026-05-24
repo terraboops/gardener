@@ -73,4 +73,25 @@ def cmd_query(args) -> int:
             "temperature": temperature,
         },
     )
+
+    # Q2.1-I: germination tracking — feed the first 3 calls into the state
+    # machine. No-op past the observation window.
+    from gardener.wizard.germination import (
+        is_response_error,
+        load as load_germination,
+        record_call,
+        save as save_germination,
+    )
+
+    state = load_germination(agent_path)
+    if state.is_observing():
+        failed = is_response_error(response)
+        new_state, events = record_call(
+            state,
+            succeeded=not failed,
+            error_reason=("empty response" if failed else None),
+        )
+        save_germination(agent_path, new_state)
+        for evt in events:
+            journal.append("germination", evt)
     return 0

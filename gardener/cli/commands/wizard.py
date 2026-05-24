@@ -238,6 +238,27 @@ def cmd_wizard(args) -> int:
     (path / "agent.yaml").write_text(
         yaml.safe_dump(cfg.to_dict(), sort_keys=False)
     )
+
+    # Q2.1-I: plant initial germination state. Records who drafted the
+    # seed (a drafter model id, "template", or "user-edited" if the user
+    # edited the draft before accepting); the cultivation loop reads
+    # on_fail to react when germination fails.
+    from gardener.wizard.germination import GerminationState, save as save_germination
+    drafted_by = "template"
+    if drafted_prompt is not None:
+        # The drafter we used (if any) is in args; mock fixtures path or
+        # --drafter id, both visible on the args namespace.
+        drafter_id = (
+            getattr(args, "drafter", None)
+            or getattr(args, "mock_drafter_fixtures", None)
+            or "drafter"
+        )
+        drafted_by = str(drafter_id)
+    save_germination(
+        path,
+        GerminationState.new(drafted_by=drafted_by),
+    )
+
     register(name, path)
 
     # Knowledge facts: drafted bullets > manual single line
