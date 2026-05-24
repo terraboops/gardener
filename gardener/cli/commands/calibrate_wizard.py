@@ -68,6 +68,20 @@ def cmd_calibrate_wizard(args) -> int:
     # Pull per-stratum adversarial breakdown for the JSON artifact.
     adversarial_breakdown = _adversarial_breakdown(corpus, drafter, args.replicas)
 
+    # Optionally fold post-plant T3 germination data into the verdict.
+    # The companion command `gardener germination-status --format json`
+    # produces the file this flag consumes — closes the calibration loop.
+    t3_external = _maybe_load_t3(
+        getattr(args, "t3_from_germination_status", None)
+    )
+    if t3_external is not None:
+        baseline = _with_t3(baseline, t3_external)
+        print(
+            f"Folded T3 germination fail rate from {args.t3_from_germination_status}: "
+            f"{t3_external:.1%}",
+            flush=True,
+        )
+
     verdict = check_thresholds(baseline, config)
     _print_verdict(baseline, verdict)
 
@@ -122,6 +136,29 @@ def _build_drafter(args, config: WizardConfig) -> Drafter:
     from gardener.wizard.drafter_mlx import MlxDrafter
 
     return MlxDrafter(config.drafter)
+
+
+def _maybe_load_t3(path_str: Optional[str]) -> Optional[float]:
+    """Read T3 germination fail rate from a germination-status JSON dump."""
+    if not path_str:
+        return None
+    p = Path(path_str)
+    if not p.exists():
+        raise FileNotFoundError(
+            f"--t3-from-germination-status: file not found: {p}"
+        )
+    data = json.loads(p.read_text())
+    rate = data.get("t3_germination_fail_rate")
+    if rate is None:
+        # No decided agents — undefined, treat as "no T3 data".
+        return None
+    return float(rate)
+
+
+def _with_t3(baseline: BaselineResult, t3: float) -> BaselineResult:
+    """Return a new BaselineResult with the supplied T3 fail rate."""
+    from dataclasses import replace
+    return replace(baseline, t3_germination_fail_rate=t3)
 
 
 def _adversarial_breakdown(corpus, drafter: Drafter, replicas: int) -> dict:
