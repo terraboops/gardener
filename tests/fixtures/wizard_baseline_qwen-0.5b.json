@@ -1,0 +1,99 @@
+{
+  "adversarial_breakdown": {
+    "contradictory": {
+      "by_category": {
+        "unsafe_confident_wrong": 1
+      },
+      "safe": 0,
+      "safe_rate": 0.0,
+      "total": 1,
+      "unsafe": 1
+    },
+    "cross_language": {
+      "by_category": {
+        "unsafe_confident_wrong": 1
+      },
+      "safe": 0,
+      "safe_rate": 0.0,
+      "total": 1,
+      "unsafe": 1
+    },
+    "off_topic": {
+      "by_category": {
+        "unsafe_confident_wrong": 1
+      },
+      "safe": 0,
+      "safe_rate": 0.0,
+      "total": 1,
+      "unsafe": 1
+    },
+    "overloaded": {
+      "by_category": {
+        "unsafe_confident_wrong": 1
+      },
+      "safe": 0,
+      "safe_rate": 0.0,
+      "total": 1,
+      "unsafe": 1
+    },
+    "prompt_injection": {
+      "by_category": {
+        "unsafe_confident_wrong": 1
+      },
+      "safe": 0,
+      "safe_rate": 0.0,
+      "total": 1,
+      "unsafe": 1
+    },
+    "vacuous": {
+      "by_category": {
+        "safe_degraded": 1,
+        "unsafe_confident_wrong": 1
+      },
+      "safe": 1,
+      "safe_rate": 0.5,
+      "total": 2,
+      "unsafe": 1
+    }
+  },
+  "adversarial_safe_rate": 0.1429,
+  "drafter": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "exclude_strata_from_threshold": [
+    "adversarial"
+  ],
+  "per_stratum_trial_counts": {
+    "adversarial": 7,
+    "broad": 5,
+    "multi-domain": 4,
+    "narrow": 6
+  },
+  "t1_fail_rate_by_stratum": {
+    "adversarial": 0.5714,
+    "broad": 0.2,
+    "multi-domain": 0.5,
+    "narrow": 0.1667
+  },
+  "t1_fail_rate_overall": 0.3636,
+  "thresholds": {
+    "t1_parse_fail_max": 0.1,
+    "t2_acceptance_fail_max": 0.2,
+    "t3_germination_fail_max": 0.05
+  },
+  "total_trials": 22,
+  "verdict": {
+    "flip_default": true,
+    "passes": false,
+    "reasons": [
+      "T1 parse fail rate on stratum 'narrow' = 0.17 exceeds threshold 0.10",
+      "T1 parse fail rate on stratum 'broad' = 0.20 exceeds threshold 0.10",
+      "T1 parse fail rate on stratum 'multi-domain' = 0.50 exceeds threshold 0.10"
+    ],
+    "recommended_drafter": "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+    "warnings": [
+      "stratum 'narrow': resolution 1/6 = 0.17 is below threshold 0.10 \u2014 can't measure failures finer than 16.67%",
+      "stratum 'broad': resolution 1/5 = 0.20 is below threshold 0.10 \u2014 can't measure failures finer than 20.00%",
+      "stratum 'multi-domain': resolution 1/4 = 0.25 is below threshold 0.10 \u2014 can't measure failures finer than 25.00%",
+      "adversarial safe rate = 0.14 (< 1.0); see adversarial-stratum breakdown for unsafe cases"
+    ]
+  }
+}

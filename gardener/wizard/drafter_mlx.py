@@ -102,7 +102,10 @@ class MlxDrafter:
         self._template = prompt_template or _PROMPT_TEMPLATE
 
     def draft(self, purpose: str, agent_name: str = "agent") -> str:
-        prompt = self._template.format(purpose=purpose if purpose else "(empty)")
+        user_msg = self._template.format(
+            purpose=purpose if purpose else "(empty)"
+        )
+        prompt = self._wrap_with_chat_template(user_msg)
         out = self._state.generate(
             self._state.model,
             self._state.tokenizer,
@@ -111,6 +114,21 @@ class MlxDrafter:
             verbose=False,
         )
         return _trim_to_recognized_sections(out)
+
+    def _wrap_with_chat_template(self, user_message: str) -> str:
+        """Apply the tokenizer's chat template if available.
+
+        Required for Instruct models — without it, small models often
+        loop forever (e.g. Qwen2.5-0.5B-Instruct emitting `### Knowledge`
+        repeatedly because no end-of-turn token is generated).
+        """
+        tok = self._state.tokenizer
+        if hasattr(tok, "apply_chat_template"):
+            messages = [{"role": "user", "content": user_message}]
+            return tok.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        return user_message
 
 
 # ---------------------------------------------------------------------------
