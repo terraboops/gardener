@@ -47,7 +47,8 @@ def test_calibrate_wizard_emits_baseline_json(tmp_path: Path):
     assert "total_trials" in data
     assert data["total_trials"] == 22  # 22 corpus entries × 1 replica
     assert "thresholds" in data
-    assert data["thresholds"]["t1_parse_fail_max"] == 0.10
+    # F5: T1 default tightened from 0.10 to 0.05.
+    assert data["thresholds"]["t1_parse_fail_max"] == 0.05
     assert data["thresholds"]["t3_germination_fail_max"] == 0.05
     assert "adversarial" in data["exclude_strata_from_threshold"]
 

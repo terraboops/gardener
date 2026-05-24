@@ -22,8 +22,17 @@ import yaml
 # can't clear the bar — that's the whole point of the threshold machinery.
 DEFAULT_DRAFTER = "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
 
-# Locked 2026-05-23 (terra). See gardener/wizard/__init__.py for rationale.
-DEFAULT_T1_PARSE_FAIL_MAX = 0.10
+# Thresholds — locked 2026-05-23 (terra); T1 tightened 2026-05-23 (V) after
+# F5 confirmed that gardener.wizard.cli_flow.run_draft_flow auto-retries
+# once on T1 parse failure (max_t1_retries=1). With auto-retry, a single
+# parse failure is invisible to the user — only a *systematic* failure
+# pattern can drive the user-visible rate above 5%. Tighten the default
+# to match.
+#
+# Operators who want the looser bar (e.g. T1=10% as in the (IV) lock) can
+# still override via global config: wizard.thresholds.t1_parse_fail_max
+# or CLI flag --t1-fail-max.
+DEFAULT_T1_PARSE_FAIL_MAX = 0.05
 DEFAULT_T2_ACCEPTANCE_FAIL_MAX = 0.20
 DEFAULT_T3_GERMINATION_FAIL_MAX = 0.05
 

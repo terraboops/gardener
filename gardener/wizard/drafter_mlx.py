@@ -5,8 +5,9 @@ so CI (which can't run MLX inference) skips them.
 
 The drafter's job is to emit *parseable* sectioned-markdown. Whether the
 small model can do that reliably is exactly what the threshold machinery
-measures — if 0.5B can't clear 10% T1 fail on the smoke corpus, the
-calibrate-wizard verdict (slice G) flips the default to a larger drafter.
+measures — if 0.5B can't clear the configured T1 threshold (5% default
+as of F5) on the smoke corpus, the calibrate-wizard verdict (slice G)
+flips the default to a larger drafter.
 """
 from __future__ import annotations
 

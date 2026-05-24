@@ -22,7 +22,9 @@ from gardener.wizard.config import WizardConfig, WizardThresholds
 
 def test_default_thresholds_match_terra_locked_values():
     cfg = WizardConfig()
-    assert cfg.thresholds.t1_parse_fail_max == pytest.approx(0.10)
+    # T1 tightened from 0.10 → 0.05 in F5 after confirming auto-retry
+    # in cli_flow.run_draft_flow hides single parse failures from the user.
+    assert cfg.thresholds.t1_parse_fail_max == pytest.approx(0.05)
     assert cfg.thresholds.t2_acceptance_fail_max == pytest.approx(0.20)
     assert cfg.thresholds.t3_germination_fail_max == pytest.approx(0.05)
 
@@ -74,7 +76,8 @@ def test_load_from_yaml_overrides_defaults(tmp_path: Path):
 
 def test_load_from_yaml_missing_file_returns_defaults(tmp_path: Path):
     cfg = WizardConfig.from_yaml(tmp_path / "nonexistent.yaml")
-    assert cfg.thresholds.t1_parse_fail_max == pytest.approx(0.10)
+    # F5: T1 tightened from 0.10 → 0.05.
+    assert cfg.thresholds.t1_parse_fail_max == pytest.approx(0.05)
 
 
 def test_load_from_yaml_missing_wizard_key_returns_defaults(tmp_path: Path):
@@ -82,6 +85,17 @@ def test_load_from_yaml_missing_wizard_key_returns_defaults(tmp_path: Path):
     cfg_path.write_text("# empty config\n")
     cfg = WizardConfig.from_yaml(cfg_path)
     assert cfg.thresholds.t3_germination_fail_max == pytest.approx(0.05)
+
+
+def test_t1_can_be_loosened_via_config_for_operators_who_disable_retry(tmp_path: Path):
+    # Some operators may want the pre-F5 looser bar (e.g. T1=10%) — the
+    # default is 5% but operators can opt back in via config.
+    cfg_path = tmp_path / "gardener.yaml"
+    cfg_path.write_text(
+        "wizard:\n  thresholds:\n    t1_parse_fail_max: 0.10\n"
+    )
+    cfg = WizardConfig.from_yaml(cfg_path)
+    assert cfg.thresholds.t1_parse_fail_max == pytest.approx(0.10)
 
 
 # ---------------------------------------------------------------------------
