@@ -84,21 +84,22 @@ def pytest_ignore_collect(collection_path: pathlib.Path) -> bool:
         "import examples.demo_simple_agent",
         "import examples.demo_full",
     )
+    # Scan the WHOLE file, not just the top import block: function-body
+    # imports of mlx (e.g. test_phase0_gate.py doing
+    # `from gardener.mlxsuper import ...` inside the test body) succeed at
+    # collection but explode at execution. Either signal — top-of-file
+    # import or body import — means the test needs mlx to do anything
+    # useful, so skipping at collection is the right policy.
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped:
-            continue
         if stripped.startswith("#"):
             continue
-        if stripped.startswith(needs_mlx_prefixes):
+        if any(stripped.startswith(p) for p in needs_mlx_prefixes):
             return True
-        # Module-level pytestmark = pytest.mark.model also implies the
-        # whole file's tests need MLX; safe to skip collection.
+        # Module-level pytestmark = pytest.mark.model also means the whole
+        # file's tests need MLX; safe to skip collection.
         if stripped.startswith("pytestmark") and "mark.model" in stripped:
             return True
-        # Stop scanning once we're well past the import block.
-        if stripped.startswith(("def ", "class ", "@pytest.")):
-            break
     return False
 
 
