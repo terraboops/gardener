@@ -26,6 +26,7 @@ from .commands.cache import (
     cmd_cache_warm,
 )
 from .commands.calibrate_wizard import cmd_calibrate_wizard
+from .commands.germination_status import cmd_germination_status
 from .commands.init import cmd_init
 from .commands.list import cmd_list_agents
 from .commands.observe import cmd_observe
@@ -133,6 +134,33 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_observe)
 
     s = sub.add_parser(
+        "germination-status",
+        help="Aggregate T3 germination state across all registered agents.",
+    )
+    s.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        help="Output format (default: table for humans).",
+    )
+    s.add_argument(
+        "--output",
+        default=None,
+        help="Write the JSON report to this path (also prints table unless --format json).",
+    )
+    s.add_argument(
+        "--fail-on-t3-exceed",
+        type=float,
+        default=None,
+        dest="fail_on_t3_exceed",
+        help=(
+            "Exit 1 if the cross-agent T3 germination fail rate exceeds "
+            "this fraction (e.g. 0.05 for the locked 5%% threshold)."
+        ),
+    )
+    s.set_defaults(func=cmd_germination_status)
+
+    s = sub.add_parser(
         "calibrate-wizard",
         help="Measure drafter quality against the smoke corpus; emit baseline.json.",
     )
@@ -197,6 +225,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--exit-nonzero-on-flip",
         action="store_true",
         help="Exit 1 when verdict says flip the default drafter (for CI gating).",
+    )
+    s.add_argument(
+        "--t3-from-germination-status",
+        default=None,
+        dest="t3_from_germination_status",
+        help=(
+            "Path to a germination-status JSON dump; folds its T3 fail rate "
+            "into this calibration's verdict (post-plant data closes the loop)."
+        ),
     )
     s.set_defaults(func=cmd_calibrate_wizard)
 

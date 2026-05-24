@@ -182,6 +182,105 @@ def load(agent_dir) -> GerminationState:
     return GerminationState.from_dict(data)
 
 
+def aggregate(
+    agents: dict,
+) -> "GerminationAggregate":
+    """Aggregate germination state across a registry of agents.
+
+    Input: {name: path} dict (same shape as gardener.cli.registry.load_registry()).
+    Returns a snapshot suitable for serialization or threshold checks.
+
+    Agents whose germination.yaml is missing OR can't be parsed are
+    counted as `unknown` and listed separately — never silently dropped.
+    """
+    from pathlib import Path
+
+    per_status: dict[str, int] = {"pending": 0, "passed": 0, "failed": 0}
+    per_drafter: dict[str, dict[str, int]] = {}
+    failures: list[dict] = []
+    unknown: list[str] = []
+    by_agent: list[dict] = []
+
+    for name, path_str in sorted(agents.items()):
+        path = Path(path_str)
+        try:
+            state = load(path)
+        except Exception as e:  # noqa: BLE001 — surface as unknown, don't crash
+            unknown.append(f"{name}: {type(e).__name__}: {e}")
+            continue
+
+        per_status[state.status] = per_status.get(state.status, 0) + 1
+        drafter_bucket = per_drafter.setdefault(
+            state.drafted_by, {"pending": 0, "passed": 0, "failed": 0}
+        )
+        drafter_bucket[state.status] = drafter_bucket.get(state.status, 0) + 1
+
+        if state.status == "failed":
+            failures.append(
+                {
+                    "agent": name,
+                    "drafted_by": state.drafted_by,
+                    "planted_at": state.planted_at,
+                    "on_fail": state.on_fail,
+                    "errors": list(state.errors),
+                }
+            )
+
+        by_agent.append(
+            {
+                "agent": name,
+                "status": state.status,
+                "calls_observed": state.calls_observed,
+                "drafted_by": state.drafted_by,
+                "on_fail": state.on_fail,
+                "planted_at": state.planted_at,
+            }
+        )
+
+    decided = per_status["passed"] + per_status["failed"]
+    t3_fail_rate = (per_status["failed"] / decided) if decided else None
+
+    return GerminationAggregate(
+        total_agents=len(agents),
+        per_status=per_status,
+        per_drafter=per_drafter,
+        failures=failures,
+        unknown=unknown,
+        by_agent=by_agent,
+        t3_germination_fail_rate=t3_fail_rate,
+        decided_count=decided,
+    )
+
+
+@dataclass(frozen=True)
+class GerminationAggregate:
+    """Snapshot of germination state across all registered agents."""
+
+    total_agents: int
+    per_status: dict        # {pending, passed, failed} -> count
+    per_drafter: dict       # drafter_id -> {pending, passed, failed} count
+    failures: list          # list of {agent, drafted_by, errors, ...}
+    unknown: list           # ["name: ParseError: ..."]
+    by_agent: list          # full per-agent rows (for table render)
+    # None when no agents have decided yet (everyone still pending).
+    t3_germination_fail_rate: float | None
+    decided_count: int      # number of agents in passed|failed status
+
+    def to_dict(self) -> dict:
+        return {
+            "total_agents": self.total_agents,
+            "decided_count": self.decided_count,
+            "t3_germination_fail_rate": self.t3_germination_fail_rate,
+            "per_status": dict(self.per_status),
+            "per_drafter": {
+                k: dict(v) for k, v in self.per_drafter.items()
+            },
+            "failures": list(self.failures),
+            "unknown": list(self.unknown),
+            "by_agent": list(self.by_agent),
+        }
+
+
 def save(agent_dir, state: GerminationState) -> None:
     """Write germination state to <agent_dir>/germination.yaml (atomic)."""
     import os
