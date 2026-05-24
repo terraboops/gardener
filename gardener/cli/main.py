@@ -25,6 +25,7 @@ from .commands.cache import (
     cmd_cache_use,
     cmd_cache_warm,
 )
+from .commands.calibrate_wizard import cmd_calibrate_wizard
 from .commands.init import cmd_init
 from .commands.list import cmd_list_agents
 from .commands.observe import cmd_observe
@@ -130,6 +131,74 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of trailing events to print (non-follow mode).",
     )
     s.set_defaults(func=cmd_observe)
+
+    s = sub.add_parser(
+        "calibrate-wizard",
+        help="Measure drafter quality against the smoke corpus; emit baseline.json.",
+    )
+    s.add_argument(
+        "--drafter",
+        default=None,
+        help="HF model id of the drafter (default: from config).",
+    )
+    s.add_argument(
+        "--mock",
+        action="store_true",
+        help="Use MockDrafter (replays fixtures; no MLX needed). For CI.",
+    )
+    s.add_argument(
+        "--mock-fixtures",
+        default=None,
+        help="Path to mock_drafter_outputs.yaml (default: tests/fixtures/...).",
+    )
+    s.add_argument(
+        "--corpus",
+        default=None,
+        help="Path to wizard_smoke_corpus.yaml (default: from config).",
+    )
+    s.add_argument(
+        "--config",
+        default=None,
+        help="Path to a gardener config YAML (default: ~/.config/gardener/config.yaml or ./gardener.yaml).",
+    )
+    s.add_argument(
+        "--replicas",
+        type=int,
+        default=1,
+        help="Number of replicas per corpus entry (default: 1). Use 4 for 5%% T3 measurement on 10-entry strata.",
+    )
+    s.add_argument(
+        "--output",
+        required=True,
+        help="Path to write baseline.json artifact.",
+    )
+    s.add_argument(
+        "--t1-fail-max",
+        type=float,
+        default=None,
+        dest="t1_fail_max",
+        help="Override T1 parse-fail threshold (default: 0.10).",
+    )
+    s.add_argument(
+        "--t2-fail-max",
+        type=float,
+        default=None,
+        dest="t2_fail_max",
+        help="Override T2 acceptance-fail threshold (default: 0.20).",
+    )
+    s.add_argument(
+        "--t3-fail-max",
+        type=float,
+        default=None,
+        dest="t3_fail_max",
+        help="Override T3 germination-fail threshold (default: 0.05).",
+    )
+    s.add_argument(
+        "--exit-nonzero-on-flip",
+        action="store_true",
+        help="Exit 1 when verdict says flip the default drafter (for CI gating).",
+    )
+    s.set_defaults(func=cmd_calibrate_wizard)
 
     s = sub.add_parser("wizard", help="Interactive agent creator.")
     s.add_argument(
