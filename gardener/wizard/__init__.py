@@ -13,8 +13,10 @@ Submodules:
     adversarial  — safety classifier for the adversarial corpus stratum
     thresholds   — baseline evaluation + threshold-comparison verdict logic
 
-Locked thresholds (terra, 2026-05-23):
-    T1 parse fail max:        10%
+Locked thresholds (terra-locked 2026-05-23, T1 tightened 2026-05-23 (V)):
+    T1 parse fail max:         5%  (tightened from 10% in F5 after
+                                    confirming auto-retry hides single
+                                    failures from the user)
     T2 acceptance fail max:   20% (logged only — NOT a switch trigger)
     T3 germination fail max:   5%
 

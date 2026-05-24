@@ -205,7 +205,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         dest="t1_fail_max",
-        help="Override T1 parse-fail threshold (default: 0.10).",
+        help="Override T1 parse-fail threshold (default: 0.05).",
     )
     s.add_argument(
         "--t2-fail-max",
