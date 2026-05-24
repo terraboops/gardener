@@ -148,6 +148,85 @@ def record_call(
     return new_state, events
 
 
+@dataclass(frozen=True)
+class GerminationAction:
+    """Describes what the cultivation loop should do in response to a
+    germination state transition.
+
+    `policy` is the per-agent `on_fail` value verbatim. `summary` is a
+    short human-readable message suitable for stderr or dashboards.
+    `journal_event` is the structured event the caller appends to the
+    agent's journal under topic `germination` for downstream observability.
+    """
+
+    policy: str           # alert | regenerate | ignore
+    summary: str
+    journal_event: dict
+
+
+def react_to_germination(
+    agent_name: str,
+    state: GerminationState,
+) -> Optional["GerminationAction"]:
+    """Decide what to do when an agent's germination state transitions.
+
+    Returns None when no action is needed (still pending, or transitioned
+    to `passed`). Returns a GerminationAction when transitioned to `failed`.
+
+    The caller is responsible for actually carrying out the policy:
+      - alert      → print summary to stderr + append the journal event
+      - regenerate → append journal event + surface the recommended
+                     `gardener wizard --regenerate` command (autonomous
+                     regeneration requires re-running the wizard with
+                     the original purpose; not yet stored — followup F4.1)
+      - ignore     → append the journal event without surfacing
+    """
+    if state.status != "failed":
+        return None
+
+    n_errors = len(state.errors)
+    base_event = {
+        "kind": "GerminationFailureReaction",
+        "ts": dt.datetime.now().isoformat(timespec="seconds"),
+        "agent": agent_name,
+        "error_count": n_errors,
+        "drafted_by": state.drafted_by,
+        "policy": state.on_fail,
+    }
+
+    if state.on_fail == "alert":
+        return GerminationAction(
+            policy="alert",
+            summary=(
+                f"⚠ germination failed for {agent_name!r}: "
+                f"{n_errors} error(s) in {state.calls_observed} call(s) "
+                f"(drafted_by={state.drafted_by}). "
+                f"Inspect with `gardener observe {agent_name} --topic germination`."
+            ),
+            journal_event=base_event,
+        )
+    if state.on_fail == "regenerate":
+        return GerminationAction(
+            policy="regenerate",
+            summary=(
+                f"⚠ germination failed for {agent_name!r}; on_fail=regenerate. "
+                f"Re-run: `gardener wizard --regenerate {agent_name}` "
+                f"(autonomous regeneration not yet implemented; "
+                f"run the wizard manually to re-seed)."
+            ),
+            journal_event={
+                **base_event,
+                "note": "manual re-seed recommended; autonomous TBD (F4.1)",
+            },
+        )
+    # ignore
+    return GerminationAction(
+        policy="ignore",
+        summary=f"(germination failed for {agent_name!r}; on_fail=ignore, no surface)",
+        journal_event=base_event,
+    )
+
+
 def is_response_error(response: str) -> bool:
     """Heuristic: did the agent's response indicate an error?
 
