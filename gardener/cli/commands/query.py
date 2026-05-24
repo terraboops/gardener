@@ -76,9 +76,13 @@ def cmd_query(args) -> int:
 
     # Q2.1-I: germination tracking — feed the first 3 calls into the state
     # machine. No-op past the observation window.
+    # F4: on transition to `failed`, react per the agent's on_fail policy
+    # (alert → stderr + event; regenerate → recommend command + event;
+    # ignore → event only).
     from gardener.wizard.germination import (
         is_response_error,
         load as load_germination,
+        react_to_germination,
         record_call,
         save as save_germination,
     )
@@ -94,4 +98,13 @@ def cmd_query(args) -> int:
         save_germination(agent_path, new_state)
         for evt in events:
             journal.append("germination", evt)
+
+        # If germination flipped to "failed" this call, run the on_fail
+        # policy and journal the response.
+        action = react_to_germination(agent_path.name, new_state)
+        if action is not None:
+            journal.append("germination", action.journal_event)
+            # alert + regenerate surface to stderr; ignore stays silent.
+            if action.policy in ("alert", "regenerate"):
+                print(action.summary, file=sys.stderr, flush=True)
     return 0
